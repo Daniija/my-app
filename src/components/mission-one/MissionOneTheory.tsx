@@ -1,95 +1,131 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 type InitialTheory = {
-  attack_method: string;
-  initial_compromise: string;
-  strongest_evidence: string[];
-  attack_sequence: string[];
-  explanation: string;
+  attack_method: string | null;
+  initial_compromise: string | null;
+  strongest_evidence: string[] | null;
+  attack_sequence: string[] | null;
 } | null;
 
-type SequenceItem = {
+type PhishingPart = {
   id: string;
   label: string;
+  explanation: string;
+  hotspot: {
+    left: string;
+    top: string;
+    width: string;
+    height: string;
+  };
 };
 
 const evidenceOptions = [
+  ['E-01', 'HR Benefits Email'],
+  ['E-02', 'Project Document Email'],
+  ['E-03', 'MFA Notification'],
+  ['E-04', 'Login Activity Log'],
+  ['E-05', 'Teams Message'],
+  ['E-06', 'Calendar Invitation'],
+  ['E-07', 'Browser History'],
+  ['E-08', 'QR Code Poster'],
+  ['E-09', 'External File Share'],
+  ['E-10', 'Out of Office Reply'],
+].map(([id, title]) => ({ id, title }));
+
+const phishingParts: PhishingPart[] = [
   {
-    id: 'E-01',
-    title: 'HR Benefits Email',
+    id: 'sender_domain',
+    label: 'Suspicious sender address',
+    explanation:
+      'The display name says IT Support, but the sender uses brightwell-secure.com instead of the normal Brightwell Group domain.',
+    hotspot: {
+      left: '23%',
+      top: '13%',
+      width: '56%',
+      height: '8%',
+    },
   },
   {
-    id: 'E-02',
-    title: 'Project Document Email',
+    id: 'external_warning',
+    label: 'External sender warning',
+    explanation:
+      'The external warning indicates that the message came from outside the organisation.',
+    hotspot: {
+      left: '50%',
+      top: '4%',
+      width: '20%',
+      height: '7%',
+    },
   },
   {
-    id: 'E-03',
-    title: 'MFA Notification',
+    id: 'unexpected_attachment',
+    label: 'Unexpected attachment',
+    explanation:
+      'Unexpected attachments can be used to deliver malicious files or trick the recipient into enabling unsafe content.',
+    hotspot: {
+      left: '3%',
+      top: '24%',
+      width: '40%',
+      height: '11%',
+    },
   },
   {
-    id: 'E-04',
-    title: 'Login Activity Log',
+    id: 'unusual_time',
+    label: 'Unusual sending time',
+    explanation:
+      'The timing is another clue to inspect when deciding whether a message is legitimate.',
+    hotspot: {
+      left: '79%',
+      top: '13%',
+      width: '18%',
+      height: '8%',
+    },
   },
   {
-    id: 'E-05',
-    title: 'Teams Message',
+    id: 'urgent_language',
+    label: 'Urgent or threatening language',
+    explanation:
+      'Phishing messages often create urgency so the recipient acts before carefully checking the request.',
+    hotspot: {
+      left: '2%',
+      top: '45%',
+      width: '60%',
+      height: '8%',
+    },
   },
   {
-    id: 'E-06',
-    title: 'Calendar Invitation',
+    id: 'verify_button',
+    label: 'Suspicious verification button',
+    explanation:
+      'A button asking the recipient to verify credentials is a common phishing technique used to lead victims to fake sign-in pages.',
+    hotspot: {
+      left: '3%',
+      top: '58%',
+      width: '43%',
+      height: '10%',
+    },
   },
   {
-    id: 'E-07',
-    title: 'Browser History',
-  },
-  {
-    id: 'E-08',
-    title: 'QR Code Poster',
-  },
-  {
-    id: 'E-09',
-    title: 'External File Share',
-  },
-  {
-    id: 'E-10',
-    title: 'Out of Office Reply',
+    id: 'fake_url',
+    label: 'Look-alike website URL',
+    explanation:
+      'The visible URL uses brightwell-secure.com instead of the organisation’s normal domain.',
+    hotspot: {
+      left: '2%',
+      top: '74%',
+      width: '78%',
+      height: '7%',
+    },
   },
 ];
 
-const sequenceOptions: SequenceItem[] = [
-  {
-    id: 'restricted_access',
-    label: 'Restricted folder accessed',
-  },
-  {
-    id: 'phishing_email',
-    label: 'Phishing email delivered',
-  },
-  {
-    id: 'external_share',
-    label: 'Sensitive file shared externally',
-  },
-  {
-    id: 'credentials_stolen',
-    label: 'Credentials captured',
-  },
-  {
-    id: 'mfa_approved',
-    label: 'MFA request approved',
-  },
-  {
-    id: 'fake_login',
-    label: 'Fake login page opened',
-  },
-  {
-    id: 'attacker_login',
-    label: 'Attacker signs in',
-  },
-];
+const phishingPartIds = phishingParts.map(
+  (part) => part.id
+);
 
 export default function MissionOneTheory({
   playerId,
@@ -103,8 +139,9 @@ export default function MissionOneTheory({
   const router = useRouter();
   const supabase = createClient();
 
-  const [attackMethod, setAttackMethod] =
-    useState(initialTheory?.attack_method ?? '');
+  const [attackMethod, setAttackMethod] = useState(
+    initialTheory?.attack_method ?? ''
+  );
 
   const [initialCompromise, setInitialCompromise] =
     useState(
@@ -116,21 +153,34 @@ export default function MissionOneTheory({
       initialTheory?.strongest_evidence ?? []
     );
 
-  const [attackSequence, setAttackSequence] =
-    useState<string[]>(
-      initialTheory?.attack_sequence?.length === 7
-        ? initialTheory.attack_sequence
-        : sequenceOptions.map((item) => item.id)
-    );
+  const [identifiedParts, setIdentifiedParts] =
+    useState<string[]>(() => {
+      const saved =
+        initialTheory?.attack_sequence ?? [];
 
-  const [explanation, setExplanation] =
-    useState(initialTheory?.explanation ?? '');
+      return saved.filter((id) =>
+        phishingPartIds.includes(id)
+      );
+    });
 
-  const [saving, setSaving] =
-    useState(false);
+  const [selectedPart, setSelectedPart] =
+    useState<string | null>(null);
 
-  const [error, setError] =
+  // BONUS question is intentionally UI-only so this
+  // update does not require a database migration.
+  const [bonusConclusion, setBonusConclusion] =
     useState('');
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const selectedPartDetails = useMemo(
+    () =>
+      phishingParts.find(
+        (part) => part.id === selectedPart
+      ) ?? null,
+    [selectedPart]
+  );
 
   function toggleEvidence(id: string) {
     setStrongestEvidence((current) => {
@@ -148,39 +198,21 @@ export default function MissionOneTheory({
     });
   }
 
-  function moveSequence(
-    index: number,
-    direction: 'up' | 'down'
-  ) {
-    setAttackSequence((current) => {
-      const targetIndex =
-        direction === 'up'
-          ? index - 1
-          : index + 1;
+  function identifyPart(id: string) {
+    setSelectedPart(id);
 
-      if (
-        targetIndex < 0 ||
-        targetIndex >= current.length
-      ) {
-        return current;
-      }
-
-      const next = [...current];
-
-      [next[index], next[targetIndex]] = [
-        next[targetIndex],
-        next[index],
-      ];
-
-      return next;
-    });
+    setIdentifiedParts((current) =>
+      current.includes(id)
+        ? current
+        : [...current, id]
+    );
   }
 
   const canSubmit =
     attackMethod.length > 0 &&
     initialCompromise.length > 0 &&
     strongestEvidence.length === 3 &&
-    attackSequence.length === 7;
+    identifiedParts.length >= 4;
 
   async function submitTheory() {
     if (!canSubmit || saving) {
@@ -203,10 +235,12 @@ export default function MissionOneTheory({
                 initialCompromise,
               strongest_evidence:
                 strongestEvidence,
+
+              // Existing text[] column reused.
+              // It now stores phishing-email clue IDs
+              // instead of attack-chain event IDs.
               attack_sequence:
-                attackSequence,
-              explanation:
-                explanation.trim(),
+                identifiedParts,
               updated_at:
                 new Date().toISOString(),
             },
@@ -253,8 +287,6 @@ export default function MissionOneTheory({
 
   return (
     <main className="min-h-screen bg-[#02080d] text-white">
-      {/* HEADER */}
-
       <header className="border-b border-cyan-950 bg-[#061019]">
         <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -278,35 +310,6 @@ export default function MissionOneTheory({
               </p>
             </div>
           </div>
-
-          {/* MISSION PROGRESS */}
-
-          <div className="mt-6 grid grid-cols-5 gap-2 text-center text-[10px] uppercase tracking-wider">
-            <ProgressStep
-              label="Briefing"
-              state="complete"
-            />
-
-            <ProgressStep
-              label="Evidence Room"
-              state="complete"
-            />
-
-            <ProgressStep
-              label="Build Your Theory"
-              state="active"
-            />
-
-            <ProgressStep
-              label="Containment"
-              state="locked"
-            />
-
-            <ProgressStep
-              label="Breach Report"
-              state="locked"
-            />
-          </div>
         </div>
       </header>
 
@@ -320,14 +323,10 @@ export default function MissionOneTheory({
         </h2>
 
         <p className="mt-3 max-w-3xl leading-7 text-slate-400">
-          The evidence has been collected.
-          Reconstruct the attack based on what
-          you discovered. You will not receive
-          correctness feedback until the breach
-          report is generated.
+          Use the evidence to determine how the
+          incident began, then inspect the phishing
+          email and identify its warning signs.
         </p>
-
-        {/* ATTACK METHOD */}
 
         <section className="mt-8 rounded-2xl border border-cyan-950 bg-[#061019] p-6">
           <QuestionNumber number="01" />
@@ -358,13 +357,12 @@ export default function MissionOneTheory({
           </div>
         </section>
 
-        {/* INITIAL COMPROMISE */}
-
         <section className="mt-6 rounded-2xl border border-cyan-950 bg-[#061019] p-6">
           <QuestionNumber number="02" />
 
           <h3 className="mt-2 text-xl font-black">
-            What was the initial point of compromise?
+            What was the initial point of
+            compromise?
           </h3>
 
           <div className="mt-5 grid gap-3">
@@ -377,10 +375,13 @@ export default function MissionOneTheory({
               <ChoiceButton
                 key={option}
                 selected={
-                  initialCompromise === option
+                  initialCompromise ===
+                  option
                 }
                 onClick={() =>
-                  setInitialCompromise(option)
+                  setInitialCompromise(
+                    option
+                  )
                 }
               >
                 {option}
@@ -389,20 +390,19 @@ export default function MissionOneTheory({
           </div>
         </section>
 
-        {/* STRONGEST EVIDENCE */}
-
         <section className="mt-6 rounded-2xl border border-cyan-950 bg-[#061019] p-6">
           <QuestionNumber number="03" />
 
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h3 className="text-xl font-black">
-                Select the three strongest pieces of evidence.
+                Select the three strongest
+                pieces of evidence.
               </h3>
 
               <p className="mt-2 text-sm text-slate-500">
-                Choose the evidence that most directly
-                proves how the account was compromised.
+                Choose the evidence that most
+                directly supports your theory.
               </p>
             </div>
 
@@ -419,166 +419,273 @@ export default function MissionOneTheory({
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {evidenceOptions.map((item) => {
-              const selected =
-                strongestEvidence.includes(
-                  item.id
-                );
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() =>
-                    toggleEvidence(item.id)
-                  }
-                  className={`rounded-xl border p-4 text-left transition ${
-                    selected
-                      ? 'border-cyan-400 bg-cyan-950/60'
-                      : 'border-slate-700 bg-[#07141d] hover:border-cyan-700'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded border ${
-                        selected
-                          ? 'border-cyan-400 bg-cyan-400 font-black text-black'
-                          : 'border-slate-600'
-                      }`}
-                    >
-                      {selected ? '✓' : ''}
-                    </div>
-
-                    <div>
-                      <p className="font-black text-cyan-300">
-                        {item.id}
-                      </p>
-
-                      <p className="mt-1 text-sm">
-                        {item.title}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ATTACK CHAIN */}
-
-        <section className="mt-6 rounded-2xl border border-cyan-950 bg-[#061019] p-6">
-          <QuestionNumber number="04" />
-
-          <h3 className="mt-2 text-xl font-black">
-            Reconstruct the attack chain.
-          </h3>
-
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-            The events below are deliberately
-            out of order. Move them until they
-            show what happened from the first
-            attacker action to the final data
-            exposure.
-          </p>
-
-          <div className="mt-6 space-y-3">
-            {attackSequence.map(
-              (eventId, index) => {
-                const item =
-                  sequenceOptions.find(
-                    (option) =>
-                      option.id === eventId
+            {evidenceOptions.map(
+              (item) => {
+                const selected =
+                  strongestEvidence.includes(
+                    item.id
                   );
 
-                if (!item) {
-                  return null;
-                }
-
                 return (
-                  <div
-                    key={eventId}
-                    className="flex items-center gap-3 rounded-xl border border-slate-700 bg-[#07141d] p-4"
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      toggleEvidence(
+                        item.id
+                      )
+                    }
+                    className={`rounded-xl border p-4 text-left transition ${
+                      selected
+                        ? 'border-cyan-400 bg-cyan-950/60'
+                        : 'border-slate-700 bg-[#07141d] hover:border-cyan-700'
+                    }`}
                   >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-800 bg-[#02080d] font-black text-cyan-300">
-                      {index + 1}
-                    </div>
-
-                    <p className="flex-1 font-bold">
-                      {item.label}
-                    </p>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={
-                          index === 0
-                        }
-                        onClick={() =>
-                          moveSequence(
-                            index,
-                            'up'
-                          )
-                        }
-                        aria-label={`Move ${item.label} up`}
-                        className="rounded-lg border border-slate-600 px-3 py-2 text-sm font-black hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-30"
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded border ${
+                          selected
+                            ? 'border-cyan-400 bg-cyan-400 font-black text-black'
+                            : 'border-slate-600'
+                        }`}
                       >
-                        ↑
-                      </button>
+                        {selected
+                          ? '✓'
+                          : ''}
+                      </div>
 
-                      <button
-                        type="button"
-                        disabled={
-                          index ===
-                          attackSequence.length - 1
-                        }
-                        onClick={() =>
-                          moveSequence(
-                            index,
-                            'down'
-                          )
-                        }
-                        aria-label={`Move ${item.label} down`}
-                        className="rounded-lg border border-slate-600 px-3 py-2 text-sm font-black hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-30"
-                      >
-                        ↓
-                      </button>
+                      <div>
+                        <p className="font-black text-cyan-300">
+                          {item.id}
+                        </p>
+
+                        <p className="mt-1 text-sm">
+                          {
+                            item.title
+                          }
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  </button>
                 );
               }
             )}
           </div>
         </section>
 
-        {/* EXPLANATION */}
-
         <section className="mt-6 rounded-2xl border border-cyan-950 bg-[#061019] p-6">
-          <QuestionNumber number="05" />
+          <QuestionNumber number="04" />
 
-          <h3 className="mt-2 text-xl font-black">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="mt-2 text-xl font-black">
+                Identify the parts of the
+                phishing email.
+              </h3>
+
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                Click the suspicious parts of
+                the email image. Each hotspot
+                reveals what that warning sign
+                means.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-cyan-900 bg-[#020b11] px-4 py-2">
+              <span className="font-black text-cyan-300">
+                {identifiedParts.length}
+              </span>
+
+              <span className="text-slate-500">
+                {' '}
+                / {phishingParts.length}{' '}
+                identified
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
+            <div>
+              <div className="relative mx-auto w-full max-w-[608px] overflow-hidden rounded-xl border border-slate-700 bg-white shadow-2xl">
+                <img
+                  src="/images/mission-01-phishing-email.png"
+                  alt="Example phishing email used for the Mission 01 investigation"
+                  className="block h-auto w-full"
+                  draggable={false}
+                />
+
+                {phishingParts.map(
+                  (part) => {
+                    const identified =
+                      identifiedParts.includes(
+                        part.id
+                      );
+
+                    return (
+                      <button
+                        key={part.id}
+                        type="button"
+                        aria-label={`Identify ${part.label}`}
+                        onClick={() =>
+                          identifyPart(
+                            part.id
+                          )
+                        }
+                        className={`absolute cursor-pointer rounded-md transition ${
+                          identified
+                            ? 'border-2 border-emerald-400 bg-emerald-400/15 shadow-[0_0_0_2px_rgba(16,185,129,0.20)]'
+                            : 'border-0 bg-transparent'
+                        }`}
+                        style={
+                          part.hotspot
+                        }
+                      >
+                        {identified && (
+                          <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-[10px] font-black text-black">
+                            ✓
+                          </span>
+                        )}
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+
+              <p className="mt-3 text-center text-xs text-slate-600">
+                Inspect the email carefully and click the areas you believe are phishing warning signs.
+              </p>
+            </div>
+
+            <aside className="rounded-xl border border-slate-700 bg-[#020b11] p-5">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-400">
+                Phishing Clues
+              </p>
+
+              <div className="mt-4 space-y-2">
+                {phishingParts.map(
+                  (part, index) => {
+                    const identified =
+                      identifiedParts.includes(
+                        part.id
+                      );
+
+                    const active =
+                      selectedPart ===
+                      part.id;
+
+                    return (
+                      <button
+                        key={part.id}
+                        type="button"
+                        disabled={
+                          !identified
+                        }
+                        onClick={() =>
+                          setSelectedPart(
+                            part.id
+                          )
+                        }
+                        className={`w-full rounded-lg border px-3 py-3 text-left text-sm transition ${
+                          active
+                            ? 'border-cyan-400 bg-cyan-950/60'
+                            : identified
+                              ? 'border-emerald-900 bg-emerald-950/20'
+                              : 'border-slate-800 bg-[#07141d] text-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                              identified
+                                ? 'bg-emerald-400 text-black'
+                                : 'border border-slate-700'
+                            }`}
+                          >
+                            {identified
+                              ? '✓'
+                              : index + 1}
+                          </span>
+
+                          <span
+                            className={
+                              identified
+                                ? 'font-bold text-slate-200'
+                                : ''
+                            }
+                          >
+                            {identified
+                              ? part.label
+                              : 'Not identified'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+
+              {selectedPartDetails && (
+                <div className="mt-5 rounded-lg border border-cyan-900 bg-cyan-950/20 p-4">
+                  <p className="font-black text-cyan-300">
+                    {
+                      selectedPartDetails.label
+                    }
+                  </p>
+
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    {
+                      selectedPartDetails.explanation
+                    }
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-5 rounded-lg border border-slate-800 bg-[#061019] p-4">
+                <p className="text-xs text-slate-500">
+                  Identify at least 4 phishing
+                  clues to continue.
+                </p>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-amber-900/60 bg-[#061019] p-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-300">
+              Bonus Question
+            </p>
+
+            <span className="rounded-full border border-amber-400/50 bg-amber-950/30 px-3 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
+              Optional
+            </span>
+          </div>
+
+          <h3 className="mt-3 text-xl font-black">
             Investigator&apos;s conclusion
           </h3>
 
-          <p className="mt-2 text-sm text-slate-500">
-            Briefly explain how you believe the
-            breach occurred.
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Explain what you believe happened
+            and which warning signs were most
+            important. This optional response
+            does not prevent you from continuing.
           </p>
 
           <textarea
-            value={explanation}
+            value={bonusConclusion}
             onChange={(event) =>
-              setExplanation(
+              setBonusConclusion(
                 event.target.value
               )
             }
             maxLength={1000}
-            placeholder="Explain what happened based on the evidence..."
-            className="mt-5 min-h-40 w-full resize-none rounded-xl border border-slate-700 bg-[#02080d] p-4 text-white outline-none focus:border-cyan-400"
+            placeholder="Optional: explain your reasoning..."
+            className="mt-5 min-h-40 w-full resize-none rounded-xl border border-slate-700 bg-[#02080d] p-4 text-white outline-none focus:border-amber-400"
           />
 
           <p className="mt-2 text-right text-xs text-slate-600">
-            {explanation.length}/1000
+            {bonusConclusion.length}/1000
           </p>
         </section>
 
@@ -604,8 +711,7 @@ export default function MissionOneTheory({
           <button
             type="button"
             disabled={
-              !canSubmit ||
-              saving
+              !canSubmit || saving
             }
             onClick={() =>
               void submitTheory()
@@ -655,48 +761,5 @@ function ChoiceButton({
     >
       {children}
     </button>
-  );
-}
-
-function ProgressStep({
-  label,
-  state,
-}: {
-  label: string;
-  state:
-    | 'complete'
-    | 'active'
-    | 'locked';
-}) {
-  return (
-    <div
-      className={
-        state === 'complete'
-          ? 'text-emerald-400'
-          : state === 'active'
-            ? 'text-cyan-300'
-            : 'text-slate-600'
-      }
-    >
-      <div
-        className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full border ${
-          state === 'complete'
-            ? 'border-emerald-400'
-            : state === 'active'
-              ? 'border-cyan-400 bg-cyan-950'
-              : 'border-slate-700'
-        }`}
-      >
-        {state === 'complete'
-          ? '✓'
-          : state === 'active'
-            ? '●'
-            : '○'}
-      </div>
-
-      <p className="mt-2">
-        {label}
-      </p>
-    </div>
   );
 }

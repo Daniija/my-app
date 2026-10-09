@@ -1,1086 +1,808 @@
 'use client';
 
-
-
-import { useMemo, useState } from 'react';
-
+import { useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-
 import { createClient } from '@/lib/supabase/client';
 
-
-
 type EvidenceCategory =
-
   | 'Emails'
-
   | 'Logs'
-
   | 'Messages'
-
   | 'Files'
-
   | 'Other';
 
-
-
 type Classification =
-
-  | 'Relevant'
-
   | 'Suspicious'
-
-  | 'Cleared'
-
-  | 'Unsure';
-
-
+  | 'Cleared';
 
 type EvidenceItem = {
-
   id: string;
-
   title: string;
-
   category: EvidenceCategory;
-
   time: string;
-
   type: string;
-
   summary: string;
-
-  detail: React.ReactNode;
-
+  detail: ReactNode;
 };
-
-
 
 type Review = {
-
   classification: Classification;
-
   notes: string;
-
+  correct?: boolean;
+  feedback?: string;
 };
-
-
 
 type SavedReview = {
-
   evidence_id: string;
-
   classification: string;
-
   notes: string | null;
-
 };
 
-
-
-const evidence: EvidenceItem[] = [
-
-  {
-
-    id: 'E-01',
-
-    title: 'HR Benefits Email',
-
-    category: 'Emails',
-
-    time: '08:20',
-
-    type: 'Email',
-
-    summary:
-
-      'An internal email regarding the annual employee benefits update.',
-
-    detail: (
-
-      <div className="space-y-4">
-
-        <div className="border-b border-slate-300 pb-4 text-sm text-slate-900">
-
-          <p>
-
-            <strong>From:</strong>{' '}
-
-            benefits@company.com
-
-          </p>
-
-          <p>
-
-            <strong>To:</strong>{' '}
-
-            Maya.Bennett@company.com
-
-          </p>
-
-          <p>
-
-            <strong>Date:</strong>{' '}
-
-            Oct 1, 2026 at 08:20 AM
-
-          </p>
-
-          <p>
-
-            <strong>Subject:</strong>{' '}
-
-            Annual Benefits Enrollment Reminder
-
-          </p>
-
-        </div>
-
-
-
-        <p className="text-slate-800">
-
-          Hi Maya,
-
-        </p>
-
-
-
-        <p className="text-slate-800">
-
-          This is a reminder that annual benefits
-
-          enrollment opens next Monday. Please visit
-
-          the employee portal from the company
-
-          intranet for additional information.
-
-        </p>
-
-
-
-        <p className="text-slate-800">
-
-          Regards,
-
-          <br />
-
-          Human Resources
-
-        </p>
-
-      </div>
-
-    ),
-
-  },
-
-
-
-  {
-
-    id: 'E-02',
-
-    title: 'Project Document Email',
-
-    category: 'Emails',
-
-    time: '08:32',
-
-    type: 'Email',
-
-    summary:
-
-      'An email asking Maya to review an updated Project Horizon document.',
-
-    detail: (
-
-      <div className="space-y-4">
-
-        <div className="border-b border-slate-300 pb-4 text-sm text-slate-900">
-
-          <p>
-
-            <strong>From:</strong>{' '}
-
-            Daniel Carter
-
-            {' '}
-
-            &lt;daniel.carter@companny.com&gt;
-
-          </p>
-
-
-
-          <p>
-
-            <strong>To:</strong>{' '}
-
-            Maya.Bennett@company.com
-
-          </p>
-
-
-
-          <p>
-
-            <strong>Date:</strong>{' '}
-
-            Oct 1, 2026 at 08:32 AM
-
-          </p>
-
-
-
-          <p>
-
-            <strong>Subject:</strong>{' '}
-
-            Updated Project Plan — Review Today
-
-          </p>
-
-        </div>
-
-
-
-        <p className="text-slate-800">
-
-          Hi Maya,
-
-        </p>
-
-
-
-        <p className="text-slate-800">
-
-          Following yesterday&apos;s leadership
-
-          meeting, the revised project plan is now
-
-          available.
-
-        </p>
-
-
-
-        <p className="text-slate-800">
-
-          Please review it before the 11:30 AM
-
-          meeting and confirm your feedback.
-
-        </p>
-
-
-
-        <div className="my-6">
-
-          <div className="inline-block rounded-md bg-blue-600 px-5 py-3 font-bold text-white">
-
-            Review Document
-
+const PROJECT_LINK =
+  'https://sharepoint.brightwell-docs.example/sites/project-horizon/Shared%20Documents/Project-Horizon-Review.docx';
+
+const QR_LINK =
+  'https://intranet.brightwellgroup.example/it/security-awareness/october-2026';
+
+const ANSWER_KEY: Record<string, Classification> = {
+  'E-01': 'Cleared',
+  'E-02': 'Suspicious',
+  'E-03': 'Cleared',
+  'E-04': 'Suspicious',
+  'E-05': 'Cleared',
+  'E-06': 'Cleared',
+  'E-07': 'Suspicious',
+  'E-08': 'Cleared',
+  'E-09': 'Suspicious',
+  'E-10': 'Suspicious',
+};
+
+const FEEDBACK: Record<string, string> = {
+  'E-01':
+    'This is a normal internal HR message using the expected company domain.',
+  'E-02':
+    'The sender uses the unfamiliar document-sharing domain brightwell-docs.example. Hovering over Review Document also reveals a look-alike destination.',
+  'E-03':
+    'MFA is a form of authentication that adds an extra layer of security. In this scenario, the attacker cannot get into the account without successfully completing the MFA step, so this item should be cleared.',
+  'E-04':
+    'A previously unseen device successfully accesses the account and later reaches a restricted folder.',
+  'E-05':
+    'This is normal internal communication confirming the scheduled Project Horizon meeting.',
+  'E-06':
+    'This is the legitimate calendar invitation for the Project Horizon meeting.',
+  'E-07':
+    'The browser history contains look-alike domains shortly before the suspicious sign-in.',
+  'E-08':
+    'The poster is verified as an official IT Department communication. Hovering over the QR code shows the expected company security-awareness link.',
+  'E-09':
+    'Sensitive Project Horizon data is shared externally after the suspicious account activity.',
+  'E-10':
+    'This message exposes project timing and identifies Maya as a Finance contact, which could help an attacker build a convincing phishing lure. Treat it as suspicious information exposure.',
+};
+
+function displayClassification(
+  evidenceId: string,
+  storedValue: string
+): Classification {
+  if (
+    storedValue === 'Suspicious' ||
+    storedValue === 'Cleared'
+  ) {
+    return storedValue;
+  }
+
+  // Older saved "Relevant" answers are shown as Suspicious.
+  // This also keeps E-10 compatible with the old scoring route.
+  return 'Suspicious';
+}
+
+function storedClassification(
+  evidenceId: string,
+  selected: Classification
+): string {
+  // Preserve compatibility with the existing final scoring route.
+  // E-10 is shown to the player as Suspicious but is stored as
+  // Relevant because the current completion route still expects that.
+  if (
+    evidenceId === 'E-10' &&
+    selected === 'Suspicious'
+  ) {
+    return 'Relevant';
+  }
+
+  return selected;
+}
+
+function OutlookShell({
+  senderName,
+  senderEmail,
+  subject,
+  date,
+  children,
+}: {
+  senderName: string;
+  senderEmail: string;
+  subject: string;
+  date: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-300 bg-white text-slate-900 shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-[#f3f6fb] px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="grid h-8 w-8 place-items-center rounded bg-[#0f6cbd] text-sm font-black text-white">
+            O
           </div>
-
+          <div>
+            <p className="text-sm font-semibold">
+              Outlook
+            </p>
+            <p className="text-[11px] text-slate-500">
+              Mail
+            </p>
+          </div>
         </div>
 
-
-
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4">
-
-          <p className="text-xs font-bold uppercase text-red-600">
-
-            Link inspection
-
-          </p>
-
-
-
-          <p className="mt-2 break-all text-sm text-slate-900">
-
-            https://companny.com/projects/plan-update
-
-          </p>
-
-
-
-          <p className="mt-3 font-bold text-red-600">
-
-            ⚠ Domain does not match the official
-
-            company domain.
-
-          </p>
-
+        <div className="flex gap-3 text-xs text-slate-500">
+          <span>Reply</span>
+          <span>Forward</span>
+          <span>⋯</span>
         </div>
-
-
-
-        <p className="text-slate-800">
-
-          Thanks,
-
-          <br />
-
-          Daniel Carter
-
-          <br />
-
-          Operations Team
-
-        </p>
-
       </div>
 
-    ),
-
-  },
-
-
-
-  {
-
-    id: 'E-03',
-
-    title: 'MFA Notification',
-
-    category: 'Messages',
-
-    time: '08:48',
-
-    type: 'Authentication Alert',
-
-    summary:
-
-      'An MFA request was approved for Maya’s account shortly after the document link was opened.',
-
-    detail: (
-
-      <div className="space-y-5">
-
-        <div className="rounded-xl border border-slate-300 p-5">
-
-          <p className="text-sm text-slate-500">
-
-            Microsoft Authentication
-
-          </p>
-
-
-
-          <h3 className="mt-2 text-xl font-bold text-slate-900">
-
-            Sign-in request approved
-
-          </h3>
-
-
-
-          <dl className="mt-5 space-y-3 text-slate-800">
-
-            <div>
-
-              <dt className="text-xs uppercase text-slate-500">
-
-                User
-
-              </dt>
-
-              <dd>Maya Bennett</dd>
-
-            </div>
-
-
-
-            <div>
-
-              <dt className="text-xs uppercase text-slate-500">
-
-                Time
-
-              </dt>
-
-              <dd>08:48 AM</dd>
-
-            </div>
-
-
-
-            <div>
-
-              <dt className="text-xs uppercase text-slate-500">
-
-                Location
-
-              </dt>
-
-              <dd>Kingston, Jamaica</dd>
-
-            </div>
-
-
-
-            <div>
-
-              <dt className="text-xs uppercase text-slate-500">
-
-                Action
-
-              </dt>
-
-              <dd>Request approved</dd>
-
-            </div>
-
-          </dl>
-
-        </div>
-
-      </div>
-
-    ),
-
-  },
-
-
-
-  {
-
-    id: 'E-04',
-
-    title: 'Login Activity Log',
-
-    category: 'Logs',
-
-    time: '08:49',
-
-    type: 'Security Log',
-
-    summary:
-
-      'Login history for Maya Bennett’s account during the morning of the incident.',
-
-    detail: (
-
-      <div>
-
-        <table className="w-full text-left text-sm text-slate-900">
-
-          <thead>
-
-            <tr className="border-b">
-
-              <th className="p-2">
-
-                Time
-
-              </th>
-
-              <th className="p-2">
-
-                Device
-
-              </th>
-
-              <th className="p-2">
-
-                Result
-
-              </th>
-
-            </tr>
-
-          </thead>
-
-
-
-          <tbody>
-
-            <tr className="border-b">
-
-              <td className="p-2">
-
-                07:56
-
-              </td>
-
-              <td className="p-2">
-
-                MAYA-LAPTOP
-
-              </td>
-
-              <td className="p-2 text-green-700">
-
-                Success
-
-              </td>
-
-            </tr>
-
-
-
-            <tr className="border-b bg-red-50">
-
-              <td className="p-2">
-
-                08:49
-
-              </td>
-
-              <td className="p-2 font-bold">
-
-                WIN-91K2
-
-              </td>
-
-              <td className="p-2 text-red-700">
-
-                Success
-
-              </td>
-
-            </tr>
-
-
-
-            <tr>
-
-              <td className="p-2">
-
-                09:17
-
-              </td>
-
-              <td className="p-2 font-bold">
-
-                WIN-91K2
-
-              </td>
-
-              <td className="p-2 text-red-700">
-
-                Restricted folder accessed
-
-              </td>
-
-            </tr>
-
-          </tbody>
-
-        </table>
-
-      </div>
-
-    ),
-
-  },
-
-
-
-  {
-
-    id: 'E-05',
-
-    title: 'Teams Message',
-
-    category: 'Messages',
-
-    time: '08:15',
-
-    type: 'Internal Message',
-
-    summary:
-
-      'A normal Teams conversation relating to the morning meeting.',
-
-    detail: (
-
-      <div className="space-y-4 text-slate-900">
-
-        <div className="rounded-lg bg-slate-100 p-4">
-
-          <p className="font-bold">
-
-            Daniel Carter
-
-          </p>
-
-          <p className="mt-1">
-
-            Morning Maya. We are still on for the
-
-            11:30 Project Horizon meeting.
-
-          </p>
-
-        </div>
-
-
-
-        <div className="ml-10 rounded-lg bg-blue-100 p-4">
-
-          <p className="font-bold">
-
-            Maya Bennett
-
-          </p>
-
-          <p className="mt-1">
-
-            Yes. I&apos;ll be there.
-
-          </p>
-
-        </div>
-
-      </div>
-
-    ),
-
-  },
-
-
-
-  {
-
-    id: 'E-06',
-
-    title: 'Calendar Invitation',
-
-    category: 'Files',
-
-    time: '07:55',
-
-    type: 'Calendar',
-
-    summary:
-
-      'The legitimate Project Horizon meeting invitation.',
-
-    detail: (
-
-      <div className="rounded-xl border border-slate-300 p-5 text-slate-900">
-
-        <h3 className="text-xl font-bold">
-
-          Project Horizon Review
-
+      <div className="border-b border-slate-200 px-5 py-4">
+        <h3 className="text-lg font-semibold">
+          {subject}
         </h3>
 
-
-
-        <p className="mt-4">
-
-          <strong>Time:</strong>{' '}
-
-          11:30 AM – 12:15 PM
-
-        </p>
-
-
-
-        <p>
-
-          <strong>Organizer:</strong>{' '}
-
-          Daniel Carter
-
-        </p>
-
-
-
-        <p>
-
-          <strong>Location:</strong>{' '}
-
-          Conference Room 2
-
-        </p>
-
-
-
-        <p className="mt-4">
-
-          Review final project materials ahead of
-
-          leadership presentation.
-
-        </p>
-
-      </div>
-
-    ),
-
-  },
-
-
-
-  {
-
-    id: 'E-07',
-
-    title: 'Browser History',
-
-    category: 'Logs',
-
-    time: '08:41',
-
-    type: 'Browser Artifact',
-
-    summary:
-
-      'Browser activity from Maya’s workstation shortly before the suspicious login.',
-
-    detail: (
-
-      <div className="space-y-3 text-sm text-slate-900">
-
-        <div className="rounded border p-3">
-
-          08:35 — company.com/intranet
-
-        </div>
-
-
-
-        <div className="rounded border border-red-300 bg-red-50 p-3 font-bold text-red-700">
-
-          08:41 — companny.com/projects/plan-update
-
-        </div>
-
-
-
-        <div className="rounded border border-red-300 bg-red-50 p-3">
-
-          08:42 — login.companny-secure.com
-
-        </div>
-
-
-
-        <div className="rounded border p-3">
-
-          08:45 — company.com/finance
-
-        </div>
-
-      </div>
-
-    ),
-
-  },
-
-
-
-  {
-
-    id: 'E-08',
-
-    title: 'QR Code Poster',
-
-    category: 'Other',
-
-    time: '08:10',
-
-    type: 'Physical Evidence',
-
-    summary:
-
-      'A cybersecurity awareness QR code poster displayed near the Finance Department.',
-
-    detail: (
-
-      <div className="text-center text-slate-900">
-
-        <div className="mx-auto flex h-44 w-44 items-center justify-center border-8 border-slate-900 bg-white text-6xl">
-
-          ▦
-
-        </div>
-
-
-
-        <h3 className="mt-5 text-xl font-black">
-
-          CYBER SECURITY AWARENESS
-
-        </h3>
-
-
-
-        <p className="mt-2">
-
-          Scan for this month&apos;s security tips.
-
-        </p>
-
-
-
-        <p className="mt-4 text-sm text-slate-500">
-
-          Poster verified as an official IT
-
-          Department communication.
-
-        </p>
-
-      </div>
-
-    ),
-
-  },
-
-
-
-  {
-
-    id: 'E-09',
-
-    title: 'External File Share',
-
-    category: 'Files',
-
-    time: '09:24',
-
-    type: 'Cloud Activity',
-
-    summary:
-
-      'A file was shared externally several minutes after the restricted folder was accessed.',
-
-    detail: (
-
-      <div className="rounded-xl border border-red-300 bg-red-50 p-5 text-slate-900">
-
-        <p className="text-xs font-bold uppercase text-red-600">
-
-          Cloud Activity Alert
-
-        </p>
-
-
-
-        <h3 className="mt-2 text-xl font-black">
-
-          External Share Created
-
-        </h3>
-
-
-
-        <dl className="mt-5 space-y-3">
-
-          <div>
-
-            <dt className="text-xs uppercase text-slate-500">
-
-              Time
-
-            </dt>
-
-            <dd>09:24 AM</dd>
-
+        <div className="mt-4 flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#dbeafe] font-black text-[#0f6cbd]">
+            {senderName
+              .split(' ')
+              .map((part) => part[0])
+              .join('')
+              .slice(0, 2)}
           </div>
 
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-semibold">
+                  {senderName}
+                </p>
+                <p className="break-all text-xs text-slate-500">
+                  &lt;{senderEmail}&gt;
+                </p>
+              </div>
 
+              <p className="text-xs text-slate-500">
+                {date}
+              </p>
+            </div>
 
-          <div>
-
-            <dt className="text-xs uppercase text-slate-500">
-
-              File
-
-            </dt>
-
-            <dd>
-
-              Project_Horizon_Financials.xlsx
-
-            </dd>
-
+            <p className="mt-2 text-xs text-slate-500">
+              To: Maya Bennett &lt;maya.bennett@brightwellgroup.example&gt;
+            </p>
           </div>
-
-
-
-          <div>
-
-            <dt className="text-xs uppercase text-slate-500">
-
-              Account
-
-            </dt>
-
-            <dd>
-
-              Maya Bennett
-
-            </dd>
-
-          </div>
-
-
-
-          <div>
-
-            <dt className="text-xs uppercase text-slate-500">
-
-              Recipient
-
-            </dt>
-
-            <dd>
-
-              External account
-
-            </dd>
-
-          </div>
-
-        </dl>
-
+        </div>
       </div>
 
-    ),
+      <div className="space-y-4 px-5 py-5 text-[15px] leading-6">
+        {children}
+      </div>
+    </div>
+  );
+}
 
-  },
+function HoverLinkButton() {
+  return (
+    <div className="group relative my-6 inline-block">
+      <div className="cursor-default rounded-md bg-[#0f6cbd] px-5 py-3 text-sm font-semibold text-white shadow-sm transition group-hover:bg-[#115ea3]">
+        Review Document
+      </div>
 
+      <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-3 hidden min-w-[320px] max-w-[420px] rounded-lg border border-slate-600 bg-slate-950 px-4 py-3 text-left text-xs text-white shadow-2xl group-hover:block">
+        <p className="mb-1 font-bold text-cyan-300">
+          Link destination
+        </p>
 
+        <p className="break-all leading-5">
+          {PROJECT_LINK}
+        </p>
 
-  {
+        <div className="absolute left-8 top-full h-0 w-0 border-x-8 border-t-8 border-x-transparent border-t-slate-950" />
+      </div>
+    </div>
+  );
+}
 
-    id: 'E-10',
+function TeamsConversation() {
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#d6d5e6] bg-white text-slate-900 shadow-sm">
+      <div className="flex items-center justify-between bg-[#5b5fc7] px-4 py-3 text-white">
+        <div className="flex items-center gap-3">
+          <div className="grid h-8 w-8 place-items-center rounded-md bg-white/15 font-black">
+            T
+          </div>
 
-    title: 'Out of Office Reply',
+          <div>
+            <p className="text-sm font-semibold">
+              Microsoft Teams
+            </p>
+            <p className="text-[11px] text-white/75">
+              Chat
+            </p>
+          </div>
+        </div>
 
-    category: 'Emails',
+        <div className="flex gap-3 text-sm text-white/80">
+          <span>⌕</span>
+          <span>⋯</span>
+        </div>
+      </div>
 
-    time: 'Yesterday',
+      <div className="border-b border-slate-200 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-[#e7e6ff] font-black text-[#5b5fc7]">
+            DC
+          </div>
 
-    type: 'Email',
+          <div>
+            <p className="font-semibold">
+              Daniel Carter
+            </p>
+            <p className="text-xs text-emerald-600">
+              ● Available
+            </p>
+          </div>
+        </div>
+      </div>
 
-    summary:
+      <div className="space-y-5 bg-[#f7f7fb] p-5">
+        <div className="flex items-start gap-3">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#e7e6ff] text-xs font-black text-[#5b5fc7]">
+            DC
+          </div>
 
-      'An automatic reply revealing information about the Project Horizon schedule.',
+          <div className="max-w-[82%]">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-xs font-semibold">
+                Daniel Carter
+              </span>
+              <span className="text-[10px] text-slate-400">
+                8:15 AM
+              </span>
+            </div>
 
-    detail: (
+            <div className="rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+              Morning Maya. We are still on for the
+              11:30 Project Horizon meeting.
+            </div>
+          </div>
+        </div>
 
-      <div className="space-y-4 text-slate-900">
+        <div className="flex justify-end">
+          <div className="max-w-[82%]">
+            <div className="mb-1 text-right text-[10px] text-slate-400">
+              8:16 AM
+            </div>
 
-        <div className="border-b pb-4 text-sm">
+            <div className="rounded-2xl rounded-tr-sm bg-[#e7e6ff] px-4 py-3 text-sm">
+              Yes. I&apos;ll be there.
+            </div>
+          </div>
+        </div>
 
-          <p>
-
-            <strong>Subject:</strong>{' '}
-
-            Automatic Reply
-
+        <div className="flex justify-end">
+          <p className="text-[10px] text-slate-400">
+            Read 8:16 AM
           </p>
-
         </div>
-
-
-
-        <p>
-
-          Thank you for your message.
-
-        </p>
-
-
-
-        <p>
-
-          I am away from my desk this afternoon
-
-          preparing materials for tomorrow&apos;s
-
-          Project Horizon review.
-
-        </p>
-
-
-
-        <p>
-
-          For urgent Finance matters, please
-
-          contact Maya Bennett.
-
-        </p>
-
-
-
-        <p>
-
-          I will return before the 11:30 AM Project
-
-          Horizon meeting.
-
-        </p>
-
-
-
-        <p className="text-slate-500">
-
-          — Andrew Campbell
-
-          <br />
-
-          Finance Supervisor
-
-        </p>
-
       </div>
 
-    ),
+      <div className="border-t border-slate-200 bg-white p-4">
+        <div className="rounded-lg border border-slate-300 px-4 py-3 text-sm text-slate-400">
+          Type a new message
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  },
-
+const qrCells = [
+  '111111100101101111111',
+  '100000100010101000001',
+  '101110101110101011101',
+  '101110100101001011101',
+  '101110101011101011101',
+  '100000101100101000001',
+  '111111101010101111111',
+  '000000000111000000000',
+  '101011101001111010101',
+  '001101001111001101100',
+  '110011110010110011011',
+  '011100001101001110010',
+  '101011111011111010101',
+  '000000001010100010100',
+  '111111101110101010111',
+  '100000101001001010010',
+  '101110101111111011101',
+  '101110100100001000110',
+  '101110101011101111001',
+  '100000100110001001010',
+  '111111101001111101111',
 ];
 
+function BetterQrCode() {
+  return (
+    <div className="group relative mx-auto w-fit">
+      <div
+        className="grid h-48 w-48 bg-white p-3 shadow-sm ring-1 ring-slate-300"
+        style={{
+          gridTemplateColumns:
+            'repeat(21, minmax(0, 1fr))',
+          gridTemplateRows:
+            'repeat(21, minmax(0, 1fr))',
+        }}
+        aria-label="Cyber security awareness QR code"
+      >
+        {qrCells.flatMap((row, rowIndex) =>
+          row.split('').map((cell, columnIndex) => (
+            <span
+              key={`${rowIndex}-${columnIndex}`}
+              className={
+                cell === '1'
+                  ? 'bg-slate-950'
+                  : 'bg-white'
+              }
+            />
+          ))
+        )}
+      </div>
 
+      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-3 hidden w-80 -translate-x-1/2 rounded-lg border border-slate-600 bg-slate-950 px-4 py-3 text-left text-xs text-white shadow-2xl group-hover:block">
+        <p className="mb-1 font-bold text-cyan-300">
+          QR destination
+        </p>
+
+        <p className="break-all leading-5">
+          {QR_LINK}
+        </p>
+
+        <div className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-8 border-t-8 border-x-transparent border-t-slate-950" />
+      </div>
+    </div>
+  );
+}
+
+const evidence: EvidenceItem[] = [
+  {
+    id: 'E-01',
+    title: 'HR Benefits Email',
+    category: 'Emails',
+    time: '08:20',
+    type: 'Email',
+    summary:
+      'An internal email regarding the annual employee benefits update.',
+    detail: (
+      <OutlookShell
+        senderName="Human Resources"
+        senderEmail="benefits@brightwellgroup.example"
+        subject="Annual Benefits Enrollment Reminder"
+        date="Oct 1, 2026 · 8:20 AM"
+      >
+        <p>Hi Maya,</p>
+        <p>
+          This is a reminder that annual benefits
+          enrollment opens next Monday. Please visit
+          the employee portal from the company
+          intranet for additional information.
+        </p>
+        <p>
+          Regards,
+          <br />
+          Human Resources
+        </p>
+      </OutlookShell>
+    ),
+  },
+
+  {
+    id: 'E-02',
+    title: 'Project Document Email',
+    category: 'Emails',
+    time: '08:32',
+    type: 'Email',
+    summary:
+      'An email asking Maya to review an updated Project Horizon document.',
+    detail: (
+      <OutlookShell
+        senderName="Daniel Carter"
+        senderEmail="daniel.carter@brightwell-docs.example"
+        subject="Updated Project Plan — Review Today"
+        date="Oct 1, 2026 · 8:32 AM"
+      >
+        <p>Hi Maya,</p>
+        <p>
+          Following yesterday&apos;s leadership
+          meeting, the revised project plan is now
+          available.
+        </p>
+        <p>
+          Please review it before the 11:30 AM
+          meeting and confirm your feedback.
+        </p>
+
+        <HoverLinkButton />
+
+        <p>
+          Thanks,
+          <br />
+          Daniel Carter
+          <br />
+          Operations Team
+        </p>
+      </OutlookShell>
+    ),
+  },
+
+  {
+    id: 'E-03',
+    title: 'MFA Notification',
+    category: 'Messages',
+    time: '08:48',
+    type: 'Authentication Alert',
+    summary:
+      'An MFA request was approved for Maya’s account shortly after the document link was opened.',
+    detail: (
+      <div className="overflow-hidden rounded-xl border border-slate-300 bg-white text-slate-900 shadow-sm">
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-[#f3f6fb] px-4 py-3">
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#2563eb] text-sm font-black text-white">
+            M
+          </div>
+
+          <div>
+            <p className="font-semibold">
+              Microsoft Authenticator
+            </p>
+            <p className="text-xs text-slate-500">
+              Security notification
+            </p>
+          </div>
+        </div>
+
+        <div className="p-5">
+          <h3 className="text-xl font-bold">
+            Sign-in request approved
+          </h3>
+
+          <dl className="mt-5 divide-y divide-slate-200 rounded-lg border border-slate-200 text-sm">
+            {[
+              ['User', 'Maya Bennett'],
+              ['Time', '08:48 AM'],
+              ['Location', 'Kingston, Jamaica'],
+              ['Action', 'Request approved'],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="grid grid-cols-[110px_1fr] gap-3 px-4 py-3"
+              >
+                <dt className="text-slate-500">
+                  {label}
+                </dt>
+                <dd className="font-medium">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+    ),
+  },
+
+  {
+    id: 'E-04',
+    title: 'Login Activity Log',
+    category: 'Logs',
+    time: '08:49',
+    type: 'Security Log',
+    summary:
+      'Login history for Maya Bennett’s account during the morning of the incident.',
+    detail: (
+      <div className="overflow-hidden rounded-xl border border-slate-300 bg-white text-slate-900 shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            Identity Security · Sign-in Activity
+          </p>
+        </div>
+
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <tr>
+              <th className="p-3">Time</th>
+              <th className="p-3">Device</th>
+              <th className="p-3">Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t">
+              <td className="p-3">07:56</td>
+              <td className="p-3">MAYA-LAPTOP</td>
+              <td className="p-3 text-emerald-700">
+                Success
+              </td>
+            </tr>
+
+            <tr className="border-t bg-amber-50">
+              <td className="p-3">08:49</td>
+              <td className="p-3 font-bold">
+                WIN-91K2
+              </td>
+              <td className="p-3 font-semibold">
+                Success
+              </td>
+            </tr>
+
+            <tr className="border-t bg-amber-50">
+              <td className="p-3">09:17</td>
+              <td className="p-3 font-bold">
+                WIN-91K2
+              </td>
+              <td className="p-3 font-semibold">
+                Restricted folder accessed
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    ),
+  },
+
+  {
+    id: 'E-05',
+    title: 'Teams Message',
+    category: 'Messages',
+    time: '08:15',
+    type: 'Internal Message',
+    summary:
+      'A normal Teams conversation relating to the morning meeting.',
+    detail: <TeamsConversation />,
+  },
+
+  {
+    id: 'E-06',
+    title: 'Calendar Invitation',
+    category: 'Files',
+    time: '07:55',
+    type: 'Calendar',
+    summary:
+      'The legitimate Project Horizon meeting invitation.',
+    detail: (
+      <div className="overflow-hidden rounded-xl border border-slate-300 bg-white text-slate-900 shadow-sm">
+        <div className="border-b border-slate-200 bg-[#f3f6fb] px-5 py-4">
+          <p className="text-xs font-bold uppercase text-[#0f6cbd]">
+            Outlook Calendar
+          </p>
+          <h3 className="mt-1 text-xl font-semibold">
+            Project Horizon Review
+          </h3>
+        </div>
+
+        <div className="grid gap-4 p-5 text-sm">
+          <div>
+            <p className="text-xs uppercase text-slate-500">
+              Time
+            </p>
+            <p className="font-medium">
+              11:30 AM – 12:15 PM
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase text-slate-500">
+              Organizer
+            </p>
+            <p className="font-medium">
+              Daniel Carter
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase text-slate-500">
+              Location
+            </p>
+            <p className="font-medium">
+              Conference Room 2
+            </p>
+          </div>
+
+          <p className="border-t border-slate-200 pt-4">
+            Review final project materials ahead of
+            leadership presentation.
+          </p>
+        </div>
+      </div>
+    ),
+  },
+
+  {
+    id: 'E-07',
+    title: 'Browser History',
+    category: 'Logs',
+    time: '08:41',
+    type: 'Browser Artifact',
+    summary:
+      'Browser activity from Maya’s workstation shortly before the suspicious login.',
+    detail: (
+      <div className="overflow-hidden rounded-xl border border-slate-300 bg-white text-sm text-slate-900 shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 font-semibold">
+          Browser History
+        </div>
+
+        {[
+          ['08:35', 'https://intranet.brightwellgroup.example/home'],
+          ['08:41', 'https://sharepoint.brightwell-docs.example/sites/project-horizon/Shared%20Documents/Project-Horizon-Review.docx'],
+          ['08:42', 'https://login.brightwell-docs.example/microsoft365/signin'],
+          ['08:45', 'https://finance.brightwellgroup.example/dashboard'],
+        ].map(([time, url]) => (
+          <div
+            key={`${time}-${url}`}
+            className="grid grid-cols-[70px_1fr] gap-3 border-b border-slate-100 px-4 py-3 last:border-0"
+          >
+            <span className="text-slate-500">
+              {time}
+            </span>
+            <span className="break-all">
+              {url}
+            </span>
+          </div>
+        ))}
+      </div>
+    ),
+  },
+
+  {
+    id: 'E-08',
+    title: 'QR Code Poster',
+    category: 'Other',
+    time: '08:10',
+    type: 'Physical Evidence',
+    summary:
+      'A cybersecurity awareness QR code poster displayed near the Finance Department.',
+    detail: (
+      <div className="rounded-xl border border-slate-300 bg-white p-7 text-center text-slate-900 shadow-sm">
+        <div className="mx-auto max-w-sm rounded-lg border-4 border-slate-900 px-6 py-7">
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-[#0f6cbd]">
+            IT Security
+          </p>
+
+          <h3 className="mt-2 text-2xl font-black">
+            CYBER SECURITY
+            <br />
+            AWARENESS
+          </h3>
+
+          <p className="mt-2 text-xs text-slate-500">
+            Think before you click.
+          </p>
+
+          <div className="my-6">
+            <BetterQrCode />
+          </div>
+
+          <p className="text-sm font-semibold">
+            Scan for this month&apos;s security tips
+          </p>
+        </div>
+
+        <p className="mt-5 text-sm text-slate-500">
+          Poster verified as an official IT
+          Department communication.
+        </p>
+      </div>
+    ),
+  },
+
+  {
+    id: 'E-09',
+    title: 'External File Share',
+    category: 'Files',
+    time: '09:24',
+    type: 'Cloud Activity',
+    summary:
+      'A file was shared externally several minutes after the restricted folder was accessed.',
+    detail: (
+      <div className="overflow-hidden rounded-xl border border-slate-300 bg-white text-slate-900 shadow-sm">
+        <div className="border-b border-slate-200 bg-[#f3f6fb] px-5 py-4">
+          <p className="text-xs font-bold uppercase text-[#0f6cbd]">
+            Cloud Activity
+          </p>
+          <h3 className="mt-1 text-xl font-semibold">
+            External Share Created
+          </h3>
+        </div>
+
+        <dl className="divide-y divide-slate-200 text-sm">
+          {[
+            ['Time', '09:24 AM'],
+            ['File', 'Project_Horizon_Financials.xlsx'],
+            ['Account', 'Maya Bennett'],
+            ['Recipient', 'External account'],
+          ].map(([label, value]) => (
+            <div
+              key={label}
+              className="grid grid-cols-[110px_1fr] gap-4 px-5 py-4"
+            >
+              <dt className="text-slate-500">
+                {label}
+              </dt>
+              <dd className="font-medium">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    ),
+  },
+
+  {
+    id: 'E-10',
+    title: 'Out of Office Reply',
+    category: 'Emails',
+    time: 'Yesterday',
+    type: 'Email',
+    summary:
+      'An automatic reply revealing information about the Project Horizon schedule.',
+    detail: (
+      <OutlookShell
+        senderName="Andrew Campbell"
+        senderEmail="andrew.campbell@brightwellgroup.example"
+        subject="Automatic Reply"
+        date="Yesterday · 3:42 PM"
+      >
+        <p>Thank you for your message.</p>
+        <p>
+          I am away from my desk this afternoon
+          preparing materials for tomorrow&apos;s
+          Project Horizon review.
+        </p>
+        <p>
+          For urgent Finance matters, please contact
+          Maya Bennett.
+        </p>
+        <p>
+          I will return before the 11:30 AM Project
+          Horizon meeting.
+        </p>
+        <p className="text-slate-500">
+          — Andrew Campbell
+          <br />
+          Finance Supervisor
+        </p>
+      </OutlookShell>
+    ),
+  },
+];
 
 export default function MissionOneEvidenceRoom({
-
   playerAlias,
-
   playerId,
-
   initialReviews,
-
 }: {
-
   playerAlias: string;
-
   playerId: string;
-
   initialReviews: SavedReview[];
-
 }) {
-
   const router = useRouter();
-
-
-
   const supabase = createClient();
 
-
-
   const [selectedEvidence, setSelectedEvidence] =
-
     useState<EvidenceItem | null>(null);
 
-
-
   const [activeCategory, setActiveCategory] =
-
     useState<'All' | EvidenceCategory>('All');
-
-
 
   const [reviews, setReviews] =
     useState<Record<string, Review>>(() => {
@@ -1088,8 +810,10 @@ export default function MissionOneEvidenceRoom({
 
       for (const review of initialReviews) {
         loaded[review.evidence_id] = {
-          classification:
-            review.classification as Classification,
+          classification: displayClassification(
+            review.evidence_id,
+            review.classification
+          ),
           notes: review.notes ?? '',
         };
       }
@@ -1097,53 +821,25 @@ export default function MissionOneEvidenceRoom({
       return loaded;
     });
 
-  const [saving, setSaving] =
-    useState(false);
-
-  const [saveError, setSaveError] =
-    useState('');
-
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [continuing, setContinuing] =
     useState(false);
-
   const [continueError, setContinueError] =
     useState('');
 
-
-
   const filteredEvidence = useMemo(() => {
-
     if (activeCategory === 'All') {
-
       return evidence;
-
     }
 
-
-
     return evidence.filter(
-
-      (item) =>
-
-        item.category === activeCategory
-
+      (item) => item.category === activeCategory
     );
-
   }, [activeCategory]);
 
-
-
-  const reviewedCount =
-
-    Object.keys(reviews).length;
-
-
-
-  const canContinue =
-
-    reviewedCount >= 7;
-
-
+  const reviewedCount = Object.keys(reviews).length;
+  const canContinue = reviewedCount >= 7;
 
   async function saveReview(
     itemId: string,
@@ -1154,51 +850,57 @@ export default function MissionOneEvidenceRoom({
     setSaveError('');
 
     try {
-      const { error: reviewError } =
-        await supabase
-          .from('mission_evidence_reviews')
-          .upsert(
-            {
-              player_id: playerId,
-              mission_id: 1,
-              evidence_id: itemId,
-              classification,
-              notes: notes.trim(),
-              reviewed_at:
-                new Date().toISOString(),
-              updated_at:
-                new Date().toISOString(),
-            },
-            {
-              onConflict:
-                'player_id,mission_id,evidence_id',
-            }
-          );
+      const valueForDatabase = storedClassification(
+        itemId,
+        classification
+      );
 
-      if (reviewError) {
-        console.error(
-          '[EVIDENCE ROOM] Save failed:',
-          reviewError
+      const { error: reviewError } = await supabase
+        .from('mission_evidence_reviews')
+        .upsert(
+          {
+            player_id: playerId,
+            mission_id: 1,
+            evidence_id: itemId,
+            classification: valueForDatabase,
+            notes: notes.trim(),
+            reviewed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict:
+              'player_id,mission_id,evidence_id',
+          }
         );
 
+      if (reviewError) {
         throw new Error(reviewError.message);
       }
 
+      const correct =
+        ANSWER_KEY[itemId] === classification;
+
+      const saved: Review = {
+        classification,
+        notes: notes.trim(),
+        correct,
+        feedback: FEEDBACK[itemId] ?? '',
+      };
+
       setReviews((current) => ({
         ...current,
-        [itemId]: {
-          classification,
-          notes: notes.trim(),
-        },
+        [itemId]: saved,
       }));
 
-      setSelectedEvidence(null);
+      return saved;
     } catch (error) {
       setSaveError(
         error instanceof Error
           ? error.message
           : 'Unable to save evidence analysis.'
       );
+
+      throw error;
     } finally {
       setSaving(false);
     }
@@ -1213,21 +915,15 @@ export default function MissionOneEvidenceRoom({
     setContinueError('');
 
     try {
-      const { error: stageError } =
-        await supabase
-          .from('mission_attempts')
-          .update({
-            current_stage: 'theory',
-          })
-          .eq('player_id', playerId)
-          .eq('mission_id', 1);
+      const { error: stageError } = await supabase
+        .from('mission_attempts')
+        .update({
+          current_stage: 'theory',
+        })
+        .eq('player_id', playerId)
+        .eq('mission_id', 1);
 
       if (stageError) {
-        console.error(
-          '[EVIDENCE ROOM] Stage update failed:',
-          stageError
-        );
-
         throw new Error(stageError.message);
       }
 
@@ -1242,519 +938,192 @@ export default function MissionOneEvidenceRoom({
     }
   }
 
-
-
   return (
-
     <main className="min-h-screen bg-[#02080d] text-white">
-
-      {/* TOP BAR */}
-
-
-
       <header className="border-b border-cyan-950 bg-[#061019]">
-
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
-
           <div className="flex flex-wrap items-center justify-between gap-4">
-
             <div>
-
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-400">
-
                 Mission 01
-
               </p>
-
-
 
               <h1 className="text-xl font-black">
-
                 THE BREACH
-
               </h1>
-
             </div>
-
-
 
             <div className="text-right">
-
               <p className="text-xs uppercase text-slate-500">
-
                 Operative
-
               </p>
-
-
-
               <p className="font-bold">
-
                 {playerAlias}
-
               </p>
-
             </div>
-
           </div>
-
-
-
-          {/* PROGRESS */}
-
-
-
-          <div className="mt-6 grid grid-cols-5 gap-2 text-center text-[10px] uppercase tracking-wider text-slate-500">
-
-            <div>
-
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-full border border-emerald-400 text-emerald-400">
-
-                ✓
-
-              </div>
-
-              <p className="mt-2">
-
-                Briefing
-
-              </p>
-
-            </div>
-
-
-
-            <div>
-
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-full border-2 border-cyan-400 bg-cyan-950 text-cyan-300">
-
-                2
-
-              </div>
-
-              <p className="mt-2 text-cyan-300">
-
-                Evidence Room
-
-              </p>
-
-            </div>
-
-
-
-            <div>
-
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-full border border-slate-600">
-
-                3
-
-              </div>
-
-              <p className="mt-2">
-
-                Build Your Theory
-
-              </p>
-
-            </div>
-
-
-
-            <div>
-
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-full border border-slate-600">
-
-                4
-
-              </div>
-
-              <p className="mt-2">
-
-                Containment
-
-              </p>
-
-            </div>
-
-
-
-            <div>
-
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-full border border-slate-600">
-
-                5
-
-              </div>
-
-              <p className="mt-2">
-
-                Breach Report
-
-              </p>
-
-            </div>
-
-          </div>
-
         </div>
-
       </header>
 
-
-
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-
-        {/* TITLE */}
-
-
-
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-
           <div>
-
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-400">
-
               Investigation Workspace
-
             </p>
-
-
 
             <h2 className="mt-2 text-3xl font-black">
-
               Evidence Room
-
             </h2>
 
-
-
             <p className="mt-2 text-slate-400">
-
               Review the available evidence and
-
-              classify each item.
-
+              classify each item as Suspicious
+              or Cleared.
             </p>
-
           </div>
-
-
 
           <div className="rounded-lg border border-cyan-900 bg-[#07141d] px-5 py-3">
-
             <p className="text-xs uppercase text-slate-500">
-
               Evidence reviewed
-
             </p>
-
-
 
             <p className="mt-1 text-xl font-black text-cyan-300">
-
               {reviewedCount} / 10
-
             </p>
-
           </div>
-
         </div>
-
-
-
-        {/* FILTERS */}
-
-
 
         <div className="mb-6 flex flex-wrap gap-2">
-
           {[
-
             'All',
-
             'Emails',
-
             'Logs',
-
             'Messages',
-
             'Files',
-
             'Other',
-
           ].map((category) => {
-
             const count =
-
               category === 'All'
-
                 ? evidence.length
-
                 : evidence.filter(
-
                     (item) =>
-
-                      item.category ===
-
-                      category
-
+                      item.category === category
                   ).length;
 
-
-
             return (
-
               <button
-
                 key={category}
-
                 type="button"
-
                 onClick={() =>
-
                   setActiveCategory(
-
                     category as
-
                       | 'All'
-
                       | EvidenceCategory
-
                   )
-
                 }
-
                 className={`rounded-lg border px-4 py-2 text-sm font-bold transition ${
-
                   activeCategory === category
-
                     ? 'border-cyan-400 bg-cyan-500 text-black'
-
                     : 'border-slate-700 bg-[#07141d] text-slate-300 hover:border-cyan-600'
-
                 }`}
-
               >
-
                 {category === 'All'
-
                   ? 'All Evidence'
-
                   : category}{' '}
-
                 ({count})
-
               </button>
-
             );
-
           })}
-
         </div>
 
-
-
-        {/* EVIDENCE GRID */}
-
-
-
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-
           {filteredEvidence.map((item) => {
-
-            const review =
-
-              reviews[item.id];
-
-
+            const review = reviews[item.id];
 
             return (
-
               <button
-
                 key={item.id}
-
                 type="button"
-
                 onClick={() =>
-
                   setSelectedEvidence(item)
-
                 }
-
                 className="group overflow-hidden rounded-xl border border-cyan-950 bg-[#061019] text-left transition hover:-translate-y-1 hover:border-cyan-500"
-
               >
-
                 <div className="flex h-28 items-center justify-center border-b border-cyan-950 bg-[#0a1821]">
-
                   <span className="text-4xl">
-
-                    {item.category === 'Emails' &&
-
-                      '✉️'}
-
-
-
-                    {item.category === 'Logs' &&
-
-                      '📊'}
-
-
-
-                    {item.category ===
-
-                      'Messages' && '💬'}
-
-
-
-                    {item.category === 'Files' &&
-
-                      '📁'}
-
-
-
-                    {item.category === 'Other' &&
-
-                      '🔎'}
-
+                    {item.category === 'Emails' && '✉️'}
+                    {item.category === 'Logs' && '📊'}
+                    {item.category === 'Messages' && '💬'}
+                    {item.category === 'Files' && '📁'}
+                    {item.category === 'Other' && '🔎'}
                   </span>
-
                 </div>
-
-
 
                 <div className="p-4">
-
                   <div className="flex items-center justify-between">
-
                     <p className="text-xs font-black text-cyan-400">
-
                       {item.id}
-
                     </p>
 
-
-
                     {review && (
-
                       <span className="text-xs font-bold text-emerald-400">
-
                         ✓ REVIEWED
-
                       </span>
-
                     )}
-
                   </div>
 
-
-
                   <h3 className="mt-2 font-black">
-
                     {item.title}
-
                   </h3>
 
-
-
                   <p className="mt-2 text-xs text-slate-500">
-
                     {item.time}
-
                   </p>
 
-
-
                   {review && (
-
                     <div className="mt-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300">
-
                       {review.classification}
-
                     </div>
-
                   )}
-
                 </div>
-
               </button>
-
             );
-
           })}
-
         </section>
 
-
-
-        {/* BOTTOM STATUS */}
-
-
-
         <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-cyan-950 bg-[#061019] p-5">
-
           <div>
-
             {!canContinue ? (
-
               <>
-
                 <p className="font-bold">
-
                   Continue investigating.
-
                 </p>
-
-
-
                 <p className="mt-1 text-sm text-slate-500">
-
-                  Review at least 7 of the 10
-
-                  evidence files before building
-
-                  your theory.
-
+                  Review at least 7 of the 10 evidence
+                  files before building your theory.
                 </p>
-
               </>
-
             ) : (
-
               <>
-
                 <p className="font-bold text-emerald-400">
-
                   Evidence requirement met.
-
                 </p>
-
-
-
                 <p className="mt-1 text-sm text-slate-500">
-
-                  You may now proceed to build
-
-                  your theory.
-
+                  You may now proceed to build your
+                  theory.
                 </p>
-
               </>
-
             )}
-
           </div>
-
-
 
           <div className="flex flex-col items-end gap-2">
             <button
               type="button"
               disabled={!canContinue || continuing}
-              onClick={() => {
-                void continueToTheory();
-              }}
+              onClick={() =>
+                void continueToTheory()
+              }
               className="rounded-lg bg-cyan-400 px-6 py-3 font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             >
               {continuing
@@ -1768,20 +1137,12 @@ export default function MissionOneEvidenceRoom({
               </p>
             )}
           </div>
-
         </div>
-
       </div>
 
-
-
-      {/* EVIDENCE VIEWER */}
-
-
-
       {selectedEvidence && (
-
         <EvidenceModal
+          key={selectedEvidence.id}
           evidence={selectedEvidence}
           existingReview={
             reviews[selectedEvidence.id]
@@ -1796,16 +1157,10 @@ export default function MissionOneEvidenceRoom({
           saving={saving}
           saveError={saveError}
         />
-
       )}
-
     </main>
-
   );
-
 }
-
-
 
 function EvidenceModal({
   evidence,
@@ -1822,58 +1177,61 @@ function EvidenceModal({
     id: string,
     classification: Classification,
     notes: string
-  ) => Promise<void>;
+  ) => Promise<Review>;
   saving: boolean;
   saveError: string;
 }) {
-
   const [classification, setClassification] =
-
     useState<Classification | null>(
-
       existingReview?.classification ?? null
-
     );
 
+  const [notes, setNotes] = useState(
+    existingReview?.notes ?? ''
+  );
 
+  const [result, setResult] =
+    useState<Review | null>(
+      existingReview?.correct !== undefined
+        ? existingReview
+        : null
+    );
 
-  const [notes, setNotes] =
+  const options: Classification[] = [
+    'Suspicious',
+    'Cleared',
+  ];
 
-    useState(existingReview?.notes ?? '');
+  async function handleSave() {
+    if (!classification || saving) {
+      return;
+    }
 
+    try {
+      const saved = await onSave(
+        evidence.id,
+        classification,
+        notes
+      );
 
+      setResult(saved);
+    } catch {
+      // Parent already exposes the save error.
+    }
+  }
 
   return (
-
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-
       <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-cyan-800 bg-[#061019] shadow-2xl">
-
-        {/* MODAL HEADER */}
-
-
-
         <header className="flex items-center justify-between border-b border-cyan-950 px-5 py-4">
-
           <div>
-
             <p className="text-xs font-bold uppercase tracking-wider text-cyan-400">
-
               Evidence File
-
             </p>
-
-
-
             <h2 className="mt-1 text-lg font-black">
-
               {evidence.id}: {evidence.title}
-
             </h2>
-
           </div>
-
-
 
           <button
             type="button"
@@ -1883,212 +1241,149 @@ function EvidenceModal({
           >
             ✕
           </button>
-
         </header>
 
-
-
         <div className="grid max-h-[80vh] overflow-y-auto lg:grid-cols-[1.35fr_.65fr]">
-
-          {/* EVIDENCE */}
-
-
-
           <div className="bg-slate-100 p-6">
-
             <div className="mb-5">
-
               <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-
                 {evidence.type}
-
               </p>
-
-
-
               <p className="mt-2 text-sm text-slate-700">
-
                 {evidence.summary}
-
               </p>
-
             </div>
 
-
-
-            <div className="rounded-xl bg-white p-6 shadow">
-
+            <div>
               {evidence.detail}
-
             </div>
-
           </div>
 
-
-
-          {/* ANALYSIS */}
-
-
-
           <aside className="p-6">
+            {!result ? (
+              <>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
+                  Analyze This Item
+                </p>
 
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
+                <p className="mt-5 text-sm text-slate-400">
+                  Mark as:
+                </p>
 
-              Analyze This Item
+                <div className="mt-3 grid gap-3">
+                  {options.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() =>
+                        setClassification(option)
+                      }
+                      className={`rounded-lg border px-4 py-3 text-left font-bold transition ${
+                        classification === option
+                          ? option === 'Suspicious'
+                            ? 'border-red-400 bg-red-950 text-red-300'
+                            : 'border-emerald-400 bg-emerald-950 text-emerald-300'
+                          : 'border-slate-700 bg-[#07141d] text-slate-300'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
 
-            </p>
+                <label className="mt-6 block">
+                  <span className="text-sm text-slate-400">
+                    Why do you think this?
+                  </span>
 
+                  <textarea
+                    value={notes}
+                    onChange={(event) =>
+                      setNotes(event.target.value)
+                    }
+                    maxLength={500}
+                    placeholder="Add your investigation notes..."
+                    className="mt-2 min-h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#02080d] p-3 text-sm text-white outline-none focus:border-cyan-400"
+                  />
+                </label>
 
-
-            <p className="mt-5 text-sm text-slate-400">
-
-              Mark as:
-
-            </p>
-
-
-
-            <div className="mt-3 grid gap-3">
-
-              {(
-
-                [
-
-                  'Relevant',
-
-                  'Suspicious',
-
-                  'Cleared',
-
-                  'Unsure',
-
-                ] as Classification[]
-
-              ).map((option) => (
+                {saveError && (
+                  <p className="mt-4 text-sm text-red-300">
+                    {saveError}
+                  </p>
+                )}
 
                 <button
-
-                  key={option}
-
                   type="button"
-
+                  disabled={!classification || saving}
                   onClick={() =>
-
-                    setClassification(option)
-
+                    void handleSave()
                   }
-
-                  className={`rounded-lg border px-4 py-3 text-left font-bold transition ${
-
-                    classification === option
-
-                      ? option === 'Suspicious'
-
-                        ? 'border-red-400 bg-red-950 text-red-300'
-
-                        : option === 'Cleared'
-
-                          ? 'border-emerald-400 bg-emerald-950 text-emerald-300'
-
-                          : option === 'Unsure'
-
-                            ? 'border-amber-400 bg-amber-950 text-amber-300'
-
-                            : 'border-cyan-400 bg-cyan-950 text-cyan-300'
-
-                      : 'border-slate-700 bg-[#07141d] text-slate-300'
-
-                  }`}
-
+                  className="mt-6 w-full rounded-lg bg-cyan-400 px-5 py-3 font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                 >
-
-                  {option}
-
+                  {saving
+                    ? 'Checking Analysis...'
+                    : 'Save Analysis'}
                 </button>
+              </>
+            ) : (
+              <div>
+                <div
+                  className={`rounded-xl border p-5 ${
+                    result.correct
+                      ? 'border-emerald-500 bg-emerald-950/40'
+                      : 'border-red-500 bg-red-950/40'
+                  }`}
+                >
+                  <p
+                    className={`text-2xl font-black ${
+                      result.correct
+                        ? 'text-emerald-300'
+                        : 'text-red-300'
+                    }`}
+                  >
+                    {result.correct
+                      ? '✓ CORRECT'
+                      : '✕ INCORRECT'}
+                  </p>
 
-              ))}
+                  <p className="mt-3 text-sm text-slate-300">
+                    Your answer:{' '}
+                    <strong>
+                      {result.classification}
+                    </strong>
+                  </p>
 
-            </div>
+                  {!result.correct && (
+                    <p className="mt-2 text-sm text-slate-300">
+                      Correct answer:{' '}
+                      <strong>
+                        {ANSWER_KEY[evidence.id]}
+                      </strong>
+                    </p>
+                  )}
 
+                  <p className="mt-4 text-sm leading-6 text-slate-200">
+                    {result.feedback}
+                  </p>
+                </div>
 
-
-            <label className="mt-6 block">
-
-              <span className="text-sm text-slate-400">
-
-                Why do you think this?
-
-              </span>
-
-
-
-              <textarea
-
-                value={notes}
-
-                onChange={(event) =>
-
-                  setNotes(event.target.value)
-
-                }
-
-                maxLength={500}
-
-                placeholder="Add your investigation notes..."
-
-                className="mt-2 min-h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#02080d] p-3 text-sm text-white outline-none focus:border-cyan-400"
-
-              />
-
-
-
-              <span className="mt-1 block text-right text-xs text-slate-600">
-
-                {notes.length}/500
-
-              </span>
-
-            </label>
-
-
-
-            <button
-              type="button"
-              disabled={!classification || saving}
-              onClick={() => {
-                if (!classification) {
-                  return;
-                }
-
-                void onSave(
-                  evidence.id,
-                  classification,
-                  notes
-                );
-              }}
-              className="mt-5 w-full rounded-lg bg-cyan-400 px-5 py-3 font-black text-black disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-            >
-              {saving
-                ? 'Saving Analysis...'
-                : 'Save Analysis'}
-            </button>
-
-            {saveError && (
-              <div className="mt-3 rounded-lg border border-red-900 bg-red-950/30 p-3">
-                <p className="text-sm text-red-300">
-                  {saveError}
+                <p className="mt-4 text-xs text-slate-500">
+                  Your analysis has been saved.
                 </p>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="mt-6 w-full rounded-lg bg-cyan-400 px-5 py-3 font-black text-black"
+                >
+                  Continue Reviewing Evidence
+                </button>
               </div>
             )}
-
           </aside>
-
         </div>
-
       </div>
-
     </div>
-
   );
-
 }

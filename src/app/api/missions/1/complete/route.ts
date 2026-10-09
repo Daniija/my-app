@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -19,11 +20,12 @@ export async function POST() {
       );
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id,role,is_active,alias')
-      .eq('id', user.id)
-      .single();
+    const { data: profile } =
+      await supabase
+        .from('profiles')
+        .select('id,role,is_active,alias')
+        .eq('id', user.id)
+        .single();
 
     if (
       !profile ||
@@ -42,35 +44,38 @@ export async function POST() {
     // LOAD MISSION DATA
     // ----------------------------------
 
-    const { data: reviews } = await supabase
-      .from('mission_evidence_reviews')
-      .select(`
-        evidence_id,
-        classification
-      `)
-      .eq('player_id', user.id)
-      .eq('mission_id', 1);
+    const { data: reviews } =
+      await supabase
+        .from('mission_evidence_reviews')
+        .select(`
+          evidence_id,
+          classification
+        `)
+        .eq('player_id', user.id)
+        .eq('mission_id', 1);
 
-    const { data: theory } = await supabase
-      .from('mission_theories')
-      .select(`
-        attack_method,
-        initial_compromise,
-        strongest_evidence,
-        attack_sequence
-      `)
-      .eq('player_id', user.id)
-      .eq('mission_id', 1)
-      .single();
+    const { data: theory } =
+      await supabase
+        .from('mission_theories')
+        .select(`
+          attack_method,
+          initial_compromise,
+          strongest_evidence,
+          attack_sequence
+        `)
+        .eq('player_id', user.id)
+        .eq('mission_id', 1)
+        .single();
 
-    const { data: containment } = await supabase
-      .from('mission_containment')
-      .select(`
-        actions
-      `)
-      .eq('player_id', user.id)
-      .eq('mission_id', 1)
-      .single();
+    const { data: containment } =
+      await supabase
+        .from('mission_containment')
+        .select(`
+          actions
+        `)
+        .eq('player_id', user.id)
+        .eq('mission_id', 1)
+        .single();
 
     if (
       !theory ||
@@ -79,42 +84,46 @@ export async function POST() {
     ) {
       return NextResponse.json(
         {
-          message: 'Mission stages are incomplete.',
+          message:
+            'Mission stages are incomplete.',
         },
         { status: 400 }
       );
     }
 
     // ==================================
-    // VALIDATE ATTACK SEQUENCE
+    // VALIDATE PHISHING EMAIL ANALYSIS
     // ==================================
 
-    const allowedSequenceEvents = [
-      'phishing_email',
-      'fake_login',
-      'credentials_stolen',
-      'mfa_approved',
-      'attacker_login',
-      'restricted_access',
-      'external_share',
+    const allowedPhishingParts = [
+      'sender_domain',
+      'external_warning',
+      'unexpected_attachment',
+      'unusual_time',
+      'urgent_language',
+      'verify_button',
+      'fake_url',
     ];
 
     const submittedSequence =
       theory.attack_sequence ?? [];
 
     const validSequence =
-      submittedSequence.length === 7 &&
-      new Set(submittedSequence).size === 7 &&
+      submittedSequence.length >= 4 &&
+      submittedSequence.length <=
+        allowedPhishingParts.length &&
+      new Set(submittedSequence).size ===
+        submittedSequence.length &&
       submittedSequence.every(
-        (event: string) =>
-          allowedSequenceEvents.includes(event)
+        (part: string) =>
+          allowedPhishingParts.includes(part)
       );
 
     if (!validSequence) {
       return NextResponse.json(
         {
           message:
-            'The submitted attack sequence is invalid.',
+            'The phishing-email analysis is invalid.',
         },
         { status: 400 }
       );
@@ -167,14 +176,40 @@ export async function POST() {
       string[]
     > = {
       'E-01': ['Cleared'],
-      'E-02': ['Suspicious', 'Relevant'],
-      'E-03': ['Suspicious', 'Relevant'],
-      'E-04': ['Suspicious', 'Relevant'],
+
+      'E-02': [
+        'Suspicious',
+        'Relevant',
+      ],
+
+      // MFA is now treated as a legitimate
+      // authentication control in this scenario.
+      'E-03': ['Cleared'],
+
+      'E-04': [
+        'Suspicious',
+        'Relevant',
+      ],
+
       'E-05': ['Cleared'],
+
       'E-06': ['Cleared'],
-      'E-07': ['Suspicious', 'Relevant'],
+
+      'E-07': [
+        'Suspicious',
+        'Relevant',
+      ],
+
       'E-08': ['Cleared'],
-      'E-09': ['Suspicious', 'Relevant'],
+
+      'E-09': [
+        'Suspicious',
+        'Relevant',
+      ],
+
+      // Current Evidence Room stores the
+      // player-facing Suspicious choice as Relevant
+      // for backwards compatibility.
       'E-10': ['Relevant'],
     };
 
@@ -192,9 +227,11 @@ export async function POST() {
       }
     }
 
-    const evidenceScore = Math.round(
-      (correctReviewCount / 10) * 500
-    );
+    const evidenceScore =
+      Math.round(
+        (correctReviewCount / 10) *
+          500
+      );
 
     // ----------------------------------
     // THEORY SCORE - 600
@@ -202,10 +239,15 @@ export async function POST() {
 
     let theoryScore = 0;
 
-    if (theory.attack_method === 'Phishing') {
+    // Primary attack method - 150
+    if (
+      theory.attack_method ===
+      'Phishing'
+    ) {
       theoryScore += 150;
     }
 
+    // Initial compromise - 150
     if (
       theory.initial_compromise ===
       'The fake Project Horizon document link'
@@ -213,100 +255,116 @@ export async function POST() {
       theoryScore += 150;
     }
 
-    const strongestCorrect = [
-      'E-02',
-      'E-03',
-      'E-04',
-    ].filter((id) =>
-      submittedEvidence.includes(id)
-    ).length;
+    // Strongest evidence - 150
+    //
+    // E-03 is now Cleared, so it is no
+    // longer one of the strongest compromise
+    // indicators.
+    const strongestCorrect =
+      ['E-02', 'E-04', 'E-07'].filter(
+        (id) =>
+          submittedEvidence.includes(
+            id
+          )
+      ).length;
 
-    theoryScore += strongestCorrect * 50;
+    theoryScore +=
+      strongestCorrect * 50;
 
     // ----------------------------------
-    // ATTACK SEQUENCE SCORE - 150
+    // PHISHING EMAIL ANALYSIS - 150
     // ----------------------------------
 
-    const expectedSequence = [
-      'phishing_email',
-      'fake_login',
-      'credentials_stolen',
-      'mfa_approved',
-      'attacker_login',
-      'restricted_access',
-      'external_share',
+    const expectedPhishingParts = [
+      'sender_domain',
+      'external_warning',
+      'unexpected_attachment',
+      'unusual_time',
+      'urgent_language',
+      'verify_button',
+      'fake_url',
     ];
 
-    let correctPositions = 0;
+    const correctPositions =
+      expectedPhishingParts.filter(
+        (part) =>
+          submittedSequence.includes(part)
+      ).length;
 
-    expectedSequence.forEach(
-      (expectedEvent, index) => {
-        if (
-          submittedSequence[index] ===
-          expectedEvent
-        ) {
-          correctPositions++;
-        }
-      }
-    );
-
-    const sequenceScore = Math.round(
-      (correctPositions /
-        expectedSequence.length) *
-        150
-    );
+    const sequenceScore =
+      Math.round(
+        (correctPositions /
+          expectedPhishingParts.length) *
+          150
+      );
 
     theoryScore += sequenceScore;
-    theoryScore = Math.min(theoryScore, 600);
+
+    // Safety cap
+    theoryScore = Math.min(
+      theoryScore,
+      600
+    );
 
     // ----------------------------------
     // CONTAINMENT SCORE - 350
     // ----------------------------------
 
     const correctContainment = [
-      'revoke_sessions',
-      'reset_credentials',
-      'preserve_logs',
-      'disable_account',
+      'maya_report_it',
+      'maya_change_password',
+      'maya_sign_out_sessions',
+      'maya_preserve_email',
     ];
 
     const harmfulContainment = [
-      'delete_logs',
-      'ignore',
-      'shutdown_network',
+      'maya_delete_and_hide',
+      'maya_wait',
+      'maya_approve_mfa',
+      'maya_reply_sender',
     ];
 
-    const submittedActions: string[] =
-      Array.isArray(containment.actions)
-        ? containment.actions
-        : [];
+    const submittedActions =
+      containment.actions ?? [];
 
     let containmentScore = 0;
 
-    for (const action of submittedActions) {
+    for (
+      const action of submittedActions
+    ) {
       if (
-        correctContainment.includes(action)
+        correctContainment.includes(
+          action
+        )
       ) {
         containmentScore += 90;
       }
 
       if (
-        harmfulContainment.includes(action)
+        harmfulContainment.includes(
+          action
+        )
       ) {
         containmentScore -= 70;
       }
     }
 
+    // Bonus for choosing all four correct
+    // actions with no harmful actions.
     const hasAllCorrect =
       correctContainment.every(
-        (action: string) =>
-          submittedActions.includes(action)
+        (action) =>
+          submittedActions.includes(
+            action
+          )
       );
 
     const selectedHarmful =
       submittedActions.some(
         (action: string) =>
-          harmfulContainment.includes(action)
+          harmfulContainment.includes(
+            action
+          )
       );
 
     if (
@@ -318,13 +376,25 @@ export async function POST() {
 
     containmentScore = Math.max(
       0,
-      Math.min(containmentScore, 350)
+      Math.min(
+        containmentScore,
+        350
+      )
     );
 
     // ----------------------------------
     // INTEL BONUS - MAX 50
     // ----------------------------------
 
+    /*
+     * Keep this at zero until your
+     * /intelligence page is connected
+     * to Supabase.
+     *
+     * The optional Investigator's Conclusion
+     * is NOT scored here, so the official
+     * Mission 01 maximum remains 1,500.
+     */
     const bonusScore = 0;
 
     // ----------------------------------
@@ -341,7 +411,8 @@ export async function POST() {
     // SAVE FINAL RESULT
     // ----------------------------------
 
-    const admin = createAdminClient();
+    const admin =
+      createAdminClient();
 
     const {
       error: reportError,
@@ -351,12 +422,22 @@ export async function POST() {
         {
           player_id: user.id,
           mission_id: 1,
-          evidence_score: evidenceScore,
-          theory_score: theoryScore,
+
+          evidence_score:
+            evidenceScore,
+
+          theory_score:
+            theoryScore,
+
           containment_score:
             containmentScore,
-          bonus_score: bonusScore,
-          total_score: totalScore,
+
+          bonus_score:
+            bonusScore,
+
+          total_score:
+            totalScore,
+
           submitted_at:
             new Date().toISOString(),
         },
@@ -376,111 +457,6 @@ export async function POST() {
         {
           message:
             'Unable to save the breach report.',
-        },
-        { status: 500 }
-      );
-    }
-
-    // ----------------------------------
-    // UPDATE LEADERBOARD
-    // ----------------------------------
-
-    const {
-      data: currentLeaderboard,
-      error: leaderboardReadError,
-    } = await admin
-      .from('leaderboard_entries')
-      .select(`
-        mission_1_score,
-        mission_2_score,
-        mission_3_score,
-        mission_4_score
-      `)
-      .eq('player_id', user.id)
-      .maybeSingle();
-
-    if (leaderboardReadError) {
-      console.error(
-        '[MISSION 01] Leaderboard read failed:',
-        leaderboardReadError
-      );
-
-      return NextResponse.json(
-        {
-          message:
-            'The breach report was saved, but the leaderboard could not be read.',
-        },
-        { status: 500 }
-      );
-    }
-
-    const mission2Score =
-      currentLeaderboard?.mission_2_score ??
-      0;
-
-    const mission3Score =
-      currentLeaderboard?.mission_3_score ??
-      0;
-
-    const mission4Score =
-      currentLeaderboard?.mission_4_score ??
-      0;
-
-    const newTotalScore =
-      totalScore +
-      mission2Score +
-      mission3Score +
-      mission4Score;
-
-    const completedCount = [
-      totalScore,
-      mission2Score,
-      mission3Score,
-      mission4Score,
-    ].filter(
-      (score) => score > 0
-    ).length;
-
-    const {
-      error: leaderboardError,
-    } = await admin
-      .from('leaderboard_entries')
-      .upsert(
-        {
-          player_id: user.id,
-          alias:
-            profile.alias ??
-            'Unknown Agent',
-          mission_1_score:
-            totalScore,
-          mission_2_score:
-            mission2Score,
-          mission_3_score:
-            mission3Score,
-          mission_4_score:
-            mission4Score,
-          total_score:
-            newTotalScore,
-          completed_count:
-            completedCount,
-          updated_at:
-            new Date().toISOString(),
-        },
-        {
-          onConflict: 'player_id',
-        }
-      );
-
-    if (leaderboardError) {
-      console.error(
-        '[MISSION 01] Leaderboard update failed:',
-        leaderboardError
-      );
-
-      return NextResponse.json(
-        {
-          message:
-            'The breach report was saved, but the leaderboard could not be updated.',
         },
         { status: 500 }
       );
@@ -512,7 +488,7 @@ export async function POST() {
       return NextResponse.json(
         {
           message:
-            'The report and leaderboard were saved, but the mission status could not be updated.',
+            'The report was saved, but the mission status could not be updated.',
         },
         { status: 500 }
       );
@@ -524,21 +500,42 @@ export async function POST() {
 
     return NextResponse.json({
       ok: true,
+
       score: {
-        evidence: evidenceScore,
-        theory: theoryScore,
-        sequence: sequenceScore,
+        evidence:
+          evidenceScore,
+
+        theory:
+          theoryScore,
+
+        // Keep response field name for
+        // backwards compatibility with any
+        // existing report UI.
+        sequence:
+          sequenceScore,
+
         containment:
           containmentScore,
-        bonus: bonusScore,
-        total: totalScore,
+
+        bonus:
+          bonusScore,
+
+        total:
+          totalScore,
+
         maximum: 1500,
       },
+
       investigation: {
         correctEvidenceReviews:
           correctReviewCount,
+
+        // Existing field name retained.
+        // It now represents the number of
+        // correctly identified phishing parts.
         correctSequencePositions:
           correctPositions,
+
         strongestEvidenceCorrect:
           strongestCorrect,
       },
