@@ -97,6 +97,13 @@ export default async function AdminPage() {
           >
             Open live board
           </Link>
+
+          <Link
+           className="btn btn-secondary"
+           href="/admin/password-resets"
+          >
+           Password Resets
+          </Link>
         </div>
       </div>
 

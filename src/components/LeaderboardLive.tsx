@@ -1,7 +1,9 @@
 'use client';
 
 import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -29,102 +31,72 @@ export default function LeaderboardLive({
   const [status, setStatus] =
     useState('LIVE');
 
-  async function refresh() {
-    const supabase =
-      createClient();
+  const refreshingRef =
+    useRef(false);
 
-    // -----------------------------------------
-    // GET ONLY REAL PLAYER ACCOUNTS
-    // -----------------------------------------
+  useEffect(() => {
+    setRows(initial);
+  }, [initial]);
 
-    const {
-      data: playerProfiles,
-      error: profileError,
-    } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('role', 'player')
-      .eq('is_active', true);
+  const refresh =
+    useCallback(async () => {
+      if (
+        refreshingRef.current
+      ) {
+        return;
+      }
 
-    if (profileError) {
-      console.error(
-        '[LEADERBOARD] Unable to load player profiles:',
-        profileError
-      );
+      refreshingRef.current =
+        true;
 
-      return;
-    }
+      try {
+        const response =
+          await fetch(
+            '/api/leaderboard',
+            {
+              method: 'GET',
+              cache: 'no-store',
+            }
+          );
 
-    const playerIds =
-      (playerProfiles ?? []).map(
-        (profile) =>
-          profile.id
-      );
-
-    // No players = empty board
-    if (
-      playerIds.length === 0
-    ) {
-      setRows([]);
-      return;
-    }
-
-    // -----------------------------------------
-    // LOAD LEADERBOARD FOR PLAYERS ONLY
-    // -----------------------------------------
-
-    const {
-      data,
-      error,
-    } = await supabase
-      .from(
-        'leaderboard_entries'
-      )
-      .select('*')
-      .in(
-        'player_id',
-        playerIds
-      )
-      .order(
-        'total_score',
-        {
-          ascending: false,
+        if (!response.ok) {
+          throw new Error(
+            `Leaderboard refresh failed (${response.status})`
+          );
         }
-      )
-      .order(
-        'mission_4_score',
-        {
-          ascending: false,
-        }
-      )
-      .order(
-        'alias',
-        {
-          ascending: true,
-        }
-      );
 
-    if (error) {
-      console.error(
-        '[LEADERBOARD] Unable to refresh leaderboard:',
-        error
-      );
+        const payload =
+          (await response.json()) as {
+            rows?: Row[];
+          };
 
-      return;
-    }
+        setRows(
+          Array.isArray(
+            payload.rows
+          )
+            ? payload.rows
+            : []
+        );
 
-    setRows(
-      (data ?? []) as Row[]
-    );
-  }
+        setStatus('LIVE');
+      } catch (error) {
+        console.error(
+          '[LEADERBOARD] Refresh failed:',
+          error
+        );
+
+        setStatus(
+          'RECONNECTING'
+        );
+      } finally {
+        refreshingRef.current =
+          false;
+      }
+    }, []);
 
   useEffect(() => {
     const supabase =
       createClient();
-
-    // -----------------------------------------
-    // WATCH SCORE CHANGES
-    // -----------------------------------------
 
     const leaderboardChannel =
       supabase
@@ -145,54 +117,40 @@ export default function LeaderboardLive({
           }
         )
         .subscribe(
-          (subscriptionStatus) => {
-            setStatus(
+          (
+            subscriptionStatus
+          ) => {
+            if (
               subscriptionStatus ===
-                'SUBSCRIBED'
-                ? 'LIVE'
-                : 'RECONNECTING'
-            );
+              'SUBSCRIBED'
+            ) {
+              setStatus(
+                'LIVE'
+              );
+            } else if (
+              subscriptionStatus ===
+                'CHANNEL_ERROR' ||
+              subscriptionStatus ===
+                'TIMED_OUT' ||
+              subscriptionStatus ===
+                'CLOSED'
+            ) {
+              setStatus(
+                'RECONNECTING'
+              );
+            }
           }
         );
 
-    // -----------------------------------------
-    // WATCH PROFILE ROLE CHANGES
-    // -----------------------------------------
-    // This is important when a player is
-    // promoted to admin or changed back
-    // to player.
-    // -----------------------------------------
-
-    const profileChannel =
-      supabase
-        .channel(
-          'leaderboard-profiles'
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema:
-              'public',
-            table:
-              'profiles',
-          },
-          () => {
-            void refresh();
-          }
-        )
-        .subscribe();
-
-    // -----------------------------------------
-    // FALLBACK REFRESH
-    // -----------------------------------------
-
+    // Even if Realtime is limited
+    // by RLS, every player receives
+    // the full board within 10 sec.
     const fallback =
       window.setInterval(
         () => {
           void refresh();
         },
-        30000
+        10000
       );
 
     return () => {
@@ -203,22 +161,18 @@ export default function LeaderboardLive({
       void supabase.removeChannel(
         leaderboardChannel
       );
-
-      void supabase.removeChannel(
-        profileChannel
-      );
     };
-  }, []);
+  }, [refresh]);
 
   const activeAgents =
     rows.filter(
       (row) =>
-        row.completed_count > 0
+        row.completed_count >
+        0
     ).length;
 
   return (
     <div>
-      {/* LIVE STATUS */}
       <div className="flex items-center justify-between gap-4">
         <p className="badge">
           {status === 'LIVE'
@@ -235,7 +189,6 @@ export default function LeaderboardLive({
         </p>
       </div>
 
-      {/* LEADERBOARD */}
       <div className="mt-5 space-y-2">
         {rows.length > 0 ? (
           rows.map(
@@ -253,7 +206,6 @@ export default function LeaderboardLive({
                     : ''
                 }`}
               >
-                {/* RANK */}
                 <div className="text-2xl font-black">
                   {index === 0
                     ? '🥇'
@@ -266,7 +218,6 @@ export default function LeaderboardLive({
                         : `#${index + 1}`}
                 </div>
 
-                {/* PLAYER */}
                 <div>
                   <p className="text-lg font-black">
                     {row.alias}
@@ -291,9 +242,10 @@ export default function LeaderboardLive({
                   </p>
                 </div>
 
-                {/* TOTAL */}
                 <p className="tabular-nums text-2xl font-black">
-                  {row.total_score}
+                  {
+                    row.total_score
+                  }
                 </p>
               </div>
             )

@@ -2,20 +2,40 @@ import Link from 'next/link';
 
 import LeaderboardLive from '@/components/LeaderboardLive';
 import { requireUser } from '@/lib/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Leaderboard() {
-  const { supabase } =
-    await requireUser();
+  // ----------------------------------
+  // REQUIRE LOGIN
+  // ----------------------------------
+
+  await requireUser();
+
+  // ----------------------------------
+  // SERVER-ONLY ADMIN CLIENT
+  // ----------------------------------
+  // This is important because normal
+  // player RLS may only allow players
+  // to see their own profile/score.
+  // ----------------------------------
+
+  const admin =
+    createAdminClient();
+
+  // ----------------------------------
+  // LOAD ACTIVE PLAYER ACCOUNTS
+  // ----------------------------------
 
   const {
     data: playerProfiles,
     error: profileError,
-  } = await supabase
+  } = await admin
     .from('profiles')
     .select('id')
-    .eq('role', 'player');
+    .eq('role', 'player')
+    .eq('is_active', true);
 
   if (profileError) {
     console.error(
@@ -26,28 +46,62 @@ export default async function Leaderboard() {
 
   const playerIds =
     (playerProfiles ?? []).map(
-      (profile) => profile.id
+      (profile) =>
+        profile.id
     );
+
+  // ----------------------------------
+  // LOAD FULL LEADERBOARD
+  // ----------------------------------
 
   let data: any[] = [];
 
-  if (playerIds.length > 0) {
+  if (
+    playerIds.length > 0
+  ) {
     const {
       data: leaderboardData,
       error: leaderboardError,
-    } = await supabase
-      .from('leaderboard_entries')
-      .select('*')
-      .in('player_id', playerIds)
-      .order('total_score', {
-        ascending: false,
-      })
-      .order('mission_4_score', {
-        ascending: false,
-      })
-      .order('alias');
+    } = await admin
+      .from(
+        'leaderboard_entries'
+      )
+      .select(`
+        player_id,
+        alias,
+        mission_1_score,
+        mission_2_score,
+        mission_3_score,
+        mission_4_score,
+        total_score,
+        completed_count
+      `)
+      .in(
+        'player_id',
+        playerIds
+      )
+      .order(
+        'total_score',
+        {
+          ascending: false,
+        }
+      )
+      .order(
+        'mission_4_score',
+        {
+          ascending: false,
+        }
+      )
+      .order(
+        'alias',
+        {
+          ascending: true,
+        }
+      );
 
-    if (leaderboardError) {
+    if (
+      leaderboardError
+    ) {
       console.error(
         '[LEADERBOARD] Unable to load leaderboard:',
         leaderboardError
@@ -57,6 +111,10 @@ export default async function Leaderboard() {
     data =
       leaderboardData ?? [];
   }
+
+  // ----------------------------------
+  // PAGE
+  // ----------------------------------
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
@@ -77,7 +135,7 @@ export default async function Leaderboard() {
 
       <section className="mt-7">
         <LeaderboardLive
-          initial={data as any}
+          initial={data}
         />
       </section>
 
