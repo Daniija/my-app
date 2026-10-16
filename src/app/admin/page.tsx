@@ -99,10 +99,10 @@ export default async function AdminPage() {
           </Link>
 
           <Link
-           className="btn btn-secondary"
-           href="/admin/password-resets"
+            className="btn btn-secondary"
+            href="/admin/password-resets"
           >
-           Password Resets
+            Password Resets
           </Link>
         </div>
       </div>
@@ -172,8 +172,8 @@ export default async function AdminPage() {
                 </div>
 
                 <MissionStatusBadge
-                    status={m.status}
-                    unlockAt={m.unlock_at}
+                  status={m.status}
+                  unlockAt={m.unlock_at}
                 />
               </div>
 
@@ -234,6 +234,29 @@ export default async function AdminPage() {
                   unlockAt={m.unlock_at}
                 />
               </div>
+
+              {/* ADMIN PREVIEW - MISSION 02 ONLY */}
+              {m.id === 2 && (
+                <div className="mt-5 border-t border-[var(--line)] pt-5">
+                  <p className="mb-2 text-xs font-bold tracking-[0.14em] text-amber-300">
+                    ADMIN TESTING
+                  </p>
+
+                  <Link
+                    href="/admin/missions/2/preview"
+                    className="btn btn-secondary"
+                  >
+                    Preview Mission 02
+                  </Link>
+
+                  <p className="muted mt-2 text-xs">
+                    Preview Mission 02 without changing
+                    its release status or affecting
+                    player progress, scores, or the
+                    leaderboard.
+                  </p>
+                </div>
+              )}
             </article>
           ))}
         </div>
