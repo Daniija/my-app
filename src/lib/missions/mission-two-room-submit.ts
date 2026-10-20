@@ -1,54 +1,20 @@
-import {
+import { NextResponse } from 'next/server';
 
-  NextResponse,
+import { createClient } from '@/lib/supabase/server';
 
-} from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
+import { randomUUID } from 'crypto';
 
+import { getMissionTwoRoom } from '@/lib/missions/mission-two-rooms';
 
-import {
-  createClient,
-} from '@/lib/supabase/server';
-
-import {
-  createAdminClient,
-} from '@/lib/supabase/admin';
+import { validateMissionTwoRoomFive } from '@/lib/missions/mission-two-room-five';
 
 import {
-  randomUUID,
-} from 'crypto';
-
-
-
-import {
-
-  getMissionTwoRoom,
-
-} from '@/lib/missions/mission-two-rooms';
-
-
-
-import {
-
-  validateMissionTwoRoomFive,
-
-} from '@/lib/missions/mission-two-room-five';
-
-
-
-import {
-
   getMissionTwoFragment,
-
   getMissionTwoPreviewFragment,
-
   MISSION_TWO_FINAL_CODE,
-
 } from '@/lib/missions/mission-two-fragments';
-
-
-
-
 
 // ==================================
 
@@ -56,38 +22,14 @@ import {
 
 // ==================================
 
-
-
-const multiAnswers: Record<
-
-  number,
-
-  string[]
-
-> = {
-
+const multiAnswers: Record<number, string[]> = {
   // ROOM 02 — USERNAME TRAIL
 
-
-
-  2: [
-
-    'travel-profile',
-
-    'pet-profile',
-
-    'recipe-profile',
-
-  ],
-
-
+  2: ['travel-profile', 'pet-profile', 'recipe-profile'],
 
   // ROOM 06 — SEARCH TRAIL
 
-
-
   6: [
-
     'staff-directory',
 
     'project-post',
@@ -97,14 +39,8 @@ const multiAnswers: Record<
     'maya-project-post',
 
     'org-chart',
-
   ],
-
 };
-
-
-
-
 
 // ==================================
 
@@ -112,49 +48,19 @@ const multiAnswers: Record<
 
 // ==================================
 
-
-
-const singleAnswers: Record<
-
-  number,
-
-  string
-
-> = {
-
+const singleAnswers: Record<number, string> = {
   // ROOM 03 — PASSWORD VAULT
 
-
-
-  3:
-
-    'random',
-
-
+  3: 'random',
 
   // ROOM 04 — WI-FI TRAP
 
-
-
-  4:
-
-    'hotspot-vpn',
-
-
+  4: 'hotspot-vpn',
 
   // ROOM 07 — THE IMPOSTOR
 
-
-
-  7:
-
-    'official-channel',
-
+  7: 'official-channel',
 };
-
-
-
-
 
 // ==================================
 
@@ -162,29 +68,19 @@ const singleAnswers: Record<
 
 // ==================================
 
+const sequenceAnswer: string[] = [
+  'social',
 
+  'work',
 
-const sequenceAnswer:
+  'username',
 
-  string[] = [
+  'personal',
 
-    'social',
+  'profile',
 
-    'work',
-
-    'username',
-
-    'personal',
-
-    'profile',
-
-    'phish',
-
-  ];
-
-
-
-
+  'phish',
+];
 
 // ==================================
 
@@ -192,51 +88,17 @@ const sequenceAnswer:
 
 // ==================================
 
+const matchingAnswer: Record<string, string> = {
+  public: 'remove',
 
+  old: 'delete',
 
-const matchingAnswer:
+  photo: 'review-photo',
 
-  Record<
+  holiday: 'restrict',
 
-    string,
-
-    string
-
-  > = {
-
-    public:
-
-      'remove',
-
-
-
-    old:
-
-      'delete',
-
-
-
-    photo:
-
-      'review-photo',
-
-
-
-    holiday:
-
-      'restrict',
-
-
-
-    username:
-
-      'separate',
-
-  };
-
-
-
-
+  username: 'separate',
+};
 
 // ==================================
 
@@ -244,69 +106,26 @@ const matchingAnswer:
 
 // ==================================
 
-
-
 function sameSet(
-
   left: string[],
 
-  right: string[]
-
+  right: string[],
 ) {
+  const a = [...new Set(left)].sort();
 
-  const a = [
-
-    ...new Set(
-
-      left
-
-    ),
-
-  ].sort();
-
-
-
-  const b = [
-
-    ...new Set(
-
-      right
-
-    ),
-
-  ].sort();
-
-
+  const b = [...new Set(right)].sort();
 
   return (
-
-    a.length ===
-
-      b.length &&
-
+    a.length === b.length &&
     a.every(
-
       (
-
         value: string,
 
-        index: number
-
-      ) =>
-
-        value ===
-
-        b[index]
-
+        index: number,
+      ) => value === b[index],
     )
-
   );
-
 }
-
-
-
-
 
 // ==================================
 
@@ -314,43 +133,16 @@ function sameSet(
 
 // ==================================
 
-
-
 function validateRoom(
-
   roomNumber: number,
 
-  body: any
-
+  body: any,
 ) {
-
-  const selectedIds =
-
-    Array.isArray(
-
-      body?.selectedIds
-
-    )
-
-      ? body.selectedIds.filter(
-
-          (
-
-            value: unknown
-
-          ): value is string =>
-
-            typeof value ===
-
-            'string'
-
-        )
-
-      : [];
-
-
-
-
+  const selectedIds = Array.isArray(body?.selectedIds)
+    ? body.selectedIds.filter(
+        (value: unknown): value is string => typeof value === 'string',
+      )
+    : [];
 
   // ----------------------------------
 
@@ -358,35 +150,13 @@ function validateRoom(
 
   // ----------------------------------
 
-
-
-  if (
-
-    multiAnswers[
-
-      roomNumber
-
-    ]
-
-  ) {
-
+  if (multiAnswers[roomNumber]) {
     return sameSet(
-
       selectedIds,
 
-      multiAnswers[
-
-        roomNumber
-
-      ]
-
+      multiAnswers[roomNumber],
     );
-
   }
-
-
-
-
 
   // ----------------------------------
 
@@ -394,39 +164,11 @@ function validateRoom(
 
   // ----------------------------------
 
-
-
-  if (
-
-    singleAnswers[
-
-      roomNumber
-
-    ]
-
-  ) {
-
+  if (singleAnswers[roomNumber]) {
     return (
-
-      selectedIds.length ===
-
-        1 &&
-
-      selectedIds[0] ===
-
-        singleAnswers[
-
-          roomNumber
-
-        ]
-
+      selectedIds.length === 1 && selectedIds[0] === singleAnswers[roomNumber]
     );
-
   }
-
-
-
-
 
   // ----------------------------------
 
@@ -434,83 +176,26 @@ function validateRoom(
 
   // ----------------------------------
 
-
-
-  if (
-
-    roomNumber ===
-
-    8
-
-  ) {
-
-    if (
-
-      !Array.isArray(
-
-        body?.sequence
-
-      )
-
-    ) {
-
+  if (roomNumber === 8) {
+    if (!Array.isArray(body?.sequence)) {
       return false;
-
     }
 
-
-
-    const sequence =
-
-      body.sequence.filter(
-
-        (
-
-          value: unknown
-
-        ): value is string =>
-
-          typeof value ===
-
-          'string'
-
-      ) as string[];
-
-
+    const sequence = body.sequence.filter(
+      (value: unknown): value is string => typeof value === 'string',
+    ) as string[];
 
     return (
-
-      sequence.length ===
-
-        sequenceAnswer.length &&
-
+      sequence.length === sequenceAnswer.length &&
       sequence.every(
-
         (
-
           value: string,
 
-          index: number
-
-        ) =>
-
-          value ===
-
-          sequenceAnswer[
-
-            index
-
-          ]
-
+          index: number,
+        ) => value === sequenceAnswer[index],
       )
-
     );
-
   }
-
-
-
-
 
   // ----------------------------------
 
@@ -518,77 +203,17 @@ function validateRoom(
 
   // ----------------------------------
 
+  if (roomNumber === 9) {
+    const matches = body?.matches;
 
-
-  if (
-
-    roomNumber ===
-
-    9
-
-  ) {
-
-    const matches =
-
-      body?.matches;
-
-
-
-    if (
-
-      !matches ||
-
-      typeof matches !==
-
-        'object' ||
-
-      Array.isArray(
-
-        matches
-
-      )
-
-    ) {
-
+    if (!matches || typeof matches !== 'object' || Array.isArray(matches)) {
       return false;
-
     }
 
-
-
-    return Object.entries(
-
-      matchingAnswer
-
-    ).every(
-
-      (
-
-        [
-
-          key,
-
-          value,
-
-        ]
-
-      ) =>
-
-        matches[
-
-          key
-
-        ] ===
-
-        value
-
+    return Object.entries(matchingAnswer).every(
+      ([key, value]) => matches[key] === value,
     );
-
   }
-
-
-
-
 
   // ----------------------------------
 
@@ -596,47 +221,17 @@ function validateRoom(
 
   // ----------------------------------
 
-
-
-  if (
-
-    roomNumber ===
-
-    10
-
-  ) {
-
+  if (roomNumber === 10) {
     return (
-
-      String(
-
-        body?.finalCode ??
-
-          ''
-
-      )
-
+      String(body?.finalCode ?? '')
         .trim()
 
-        .toUpperCase() ===
-
-      MISSION_TWO_FINAL_CODE
-
+        .toUpperCase() === MISSION_TWO_FINAL_CODE
     );
-
   }
 
-
-
-
-
   return false;
-
 }
-
-
-
-
 
 // ==================================
 
@@ -644,97 +239,29 @@ function validateRoom(
 
 // ==================================
 
+function incorrectMessage(roomNumber: number) {
+  const messages: Record<number, string> = {
+    2: 'Not quite. A matching username alone is not enough. Compare the location, travel dates, birthday information, pet details and other repeated clues to determine which profiles most likely belong to the same Maya.',
 
+    3: 'Not quite. Some passwords look complex but are still predictable when they contain information the attacker already knows about Maya.',
 
-function incorrectMessage(
+    4: 'Not quite. Consider both the trustworthiness of the connection and how the confidential traffic will be protected.',
 
-  roomNumber: number
+    5: 'FORENSIC REPORT INCOMPLETE. Some extracted values do not match the evidence. Correct the fields marked CHECK AGAIN and resubmit the report.',
 
-) {
+    6: 'Not quite. Select only the evidence that directly helps the attacker impersonate Maya’s supervisor in a Project Horizon message. Some information is personal but irrelevant to that specific attack.',
 
-  const messages:
+    7: 'Not quite. Do not keep the conversation going with the suspicious sender. Verify independently through the official company channel.',
 
-    Record<
+    8: 'Sequence incorrect. Think from discovery, to connection, to profiling, to the final phishing message.',
 
-      number,
+    9: 'Some cleanup actions are mismatched. Match each exposure with the action that directly reduces that risk.',
 
-      string
+    10: 'ACCESS DENIED. You have all eight fragments. Unscramble them to discover the final escape code.',
+  };
 
-    > = {
-
-      2:
-
-        'Not quite. A matching username alone is not enough. Compare the location, travel dates, birthday information, pet details and other repeated clues to determine which profiles most likely belong to the same Maya.',
-
-
-
-      3:
-
-        'Not quite. Some passwords look complex but are still predictable when they contain information the attacker already knows about Maya.',
-
-
-
-      4:
-
-        'Not quite. Consider both the trustworthiness of the connection and how the confidential traffic will be protected.',
-
-
-
-      5:
-
-        'FORENSIC REPORT INCOMPLETE. Some extracted values do not match the evidence. Correct the fields marked CHECK AGAIN and resubmit the report.',
-
-
-
-      6:
-
-        'Not quite. Select only the evidence that directly helps the attacker impersonate Maya’s supervisor in a Project Horizon message. Some information is personal but irrelevant to that specific attack.',
-
-
-
-      7:
-
-        'Not quite. Do not keep the conversation going with the suspicious sender. Verify independently through the official company channel.',
-
-
-
-      8:
-
-        'Sequence incorrect. Think from discovery, to connection, to profiling, to the final phishing message.',
-
-
-
-      9:
-
-        'Some cleanup actions are mismatched. Match each exposure with the action that directly reduces that risk.',
-
-
-
-      10:
-
-        'ACCESS DENIED. You have all eight fragments. Unscramble them to discover the final escape code.',
-
-    };
-
-
-
-  return (
-
-    messages[
-
-      roomNumber
-
-    ] ??
-
-    'Not quite. Review the room and try again.'
-
-  );
-
+  return messages[roomNumber] ?? 'Not quite. Review the room and try again.';
 }
-
-
-
-
 
 // ==================================
 // FINALIZE MISSION 02 SCORE
@@ -749,309 +276,202 @@ async function finalizeMissionTwoScore({
   playerAlias: string | null;
   attemptId: string;
 }) {
-  const admin =
-    createAdminClient();
+  const admin = createAdminClient();
 
-  const now =
-    new Date().toISOString();
+  const now = new Date().toISOString();
 
-  const {
-    data: mission,
-    error: missionError,
-  } =
-    await admin
-      .from('missions')
-      .select('max_score')
-      .eq('id', 2)
-      .single();
+  const { data: mission, error: missionError } = await admin
+    .from('missions')
+    .select('max_score')
+    .eq('id', 2)
+    .single();
 
   if (missionError) {
     throw new Error(
-      `Unable to load Mission 02 score configuration: ${missionError.message}`
+      `Unable to load Mission 02 score configuration: ${missionError.message}`,
     );
   }
 
-  const missionTwoScore =
-    Number(
-      mission?.max_score ??
-      1500
-    );
+  const missionTwoScore = Number(mission?.max_score ?? 1500);
 
-  if (
-    !Number.isFinite(
-      missionTwoScore
-    ) ||
-    missionTwoScore <= 0
-  ) {
-    throw new Error(
-      'Mission 02 has an invalid max_score.'
-    );
+  if (!Number.isFinite(missionTwoScore) || missionTwoScore <= 0) {
+    throw new Error('Mission 02 has an invalid max_score.');
   }
 
-  const {
-    data: existingScore,
-    error: existingScoreError,
-  } =
-    await admin
-      .from('mission_scores')
-      .select('id')
-      .eq('player_id', playerId)
-      .eq('mission_id', 2)
-      .maybeSingle();
+  const { data: existingScore, error: existingScoreError } = await admin
+    .from('mission_scores')
+    .select('id')
+    .eq('player_id', playerId)
+    .eq('mission_id', 2)
+    .maybeSingle();
 
   if (existingScoreError) {
     throw new Error(
-      `Unable to check the existing Mission 02 score: ${existingScoreError.message}`
+      `Unable to check the existing Mission 02 score: ${existingScoreError.message}`,
     );
   }
 
   const scorePayload = {
-    attempt_id:
-      attemptId,
+    attempt_id: attemptId,
 
-    player_id:
-      playerId,
+    player_id: playerId,
 
-    mission_id:
-      2,
+    mission_id: 2,
 
     breakdown: {
-      mission:
-        'The Digital Footprint',
-      rooms_cleared:
-        10,
-      final_lock:
-        'cleared',
-      scoring_source:
-        'mission_02_completion',
+      mission: 'The Digital Footprint',
+      rooms_cleared: 10,
+      final_lock: 'cleared',
+      scoring_source: 'mission_02_completion',
     },
 
-    base_score:
-      missionTwoScore,
+    base_score: missionTwoScore,
 
-    bonus_score:
-      0,
+    bonus_score: 0,
 
-    total_score:
-      missionTwoScore,
+    total_score: missionTwoScore,
 
-    accuracy_points:
-      missionTwoScore,
+    accuracy_points: missionTwoScore,
 
-    updated_at:
-      now,
+    updated_at: now,
   };
 
   if (existingScore) {
-    const {
-      error: scoreUpdateError,
-    } =
-      await admin
-        .from('mission_scores')
-        .update(scorePayload)
-        .eq('id', existingScore.id);
+    const { error: scoreUpdateError } = await admin
+      .from('mission_scores')
+      .update(scorePayload)
+      .eq('id', existingScore.id);
 
     if (scoreUpdateError) {
       throw new Error(
-        `Unable to update the Mission 02 score: ${scoreUpdateError.message}`
+        `Unable to update the Mission 02 score: ${scoreUpdateError.message}`,
       );
     }
   } else {
-    const {
-      error: scoreInsertError,
-    } =
-      await admin
-        .from('mission_scores')
-        .insert({
-          id:
-            randomUUID(),
+    const { error: scoreInsertError } = await admin
+      .from('mission_scores')
+      .insert({
+        id: randomUUID(),
 
-          ...scorePayload,
+        ...scorePayload,
 
-          created_at:
-            now,
-        });
+        created_at: now,
+      });
 
     if (scoreInsertError) {
       throw new Error(
-        `Unable to save the Mission 02 score: ${scoreInsertError.message}`
+        `Unable to save the Mission 02 score: ${scoreInsertError.message}`,
       );
     }
   }
 
-  const {
-    data: officialScores,
-    error: officialScoresError,
-  } =
-    await admin
-      .from('mission_scores')
-      .select(`
+  const { data: officialScores, error: officialScoresError } = await admin
+    .from('mission_scores')
+    .select(
+      `
         mission_id,
         total_score
-      `)
-      .eq(
-        'player_id',
-        playerId
-      );
+      `,
+    )
+    .eq('player_id', playerId);
 
   if (officialScoresError) {
     throw new Error(
-      `Unable to load cumulative scores: ${officialScoresError.message}`
+      `Unable to load cumulative scores: ${officialScoresError.message}`,
     );
   }
 
-  const {
-    data: currentLeaderboard,
-    error: leaderboardLookupError,
-  } =
+  const { data: currentLeaderboard, error: leaderboardLookupError } =
     await admin
       .from('leaderboard_entries')
-      .select(`
+      .select(
+        `
         player_id,
         alias,
         mission_1_score,
         mission_2_score,
         mission_3_score,
         mission_4_score
-      `)
-      .eq(
-        'player_id',
-        playerId
+      `,
       )
+      .eq('player_id', playerId)
       .maybeSingle();
 
   if (leaderboardLookupError) {
     throw new Error(
-      `Unable to load the leaderboard entry: ${leaderboardLookupError.message}`
+      `Unable to load the leaderboard entry: ${leaderboardLookupError.message}`,
     );
   }
 
-  const scoreMap =
-    new Map<number, number>(
-      (officialScores ?? []).map(
-        (score) => [
-          Number(
-            score.mission_id
-          ),
-          Number(
-            score.total_score ??
-            0
-          ),
-        ]
-      )
-    );
+  const scoreMap = new Map<number, number>(
+    (officialScores ?? []).map((score) => [
+      Number(score.mission_id),
+      Number(score.total_score ?? 0),
+    ]),
+  );
 
   const mission1Score =
-    scoreMap.get(1) ??
-    Number(
-      currentLeaderboard
-        ?.mission_1_score ??
-      0
-    );
+    scoreMap.get(1) ?? Number(currentLeaderboard?.mission_1_score ?? 0);
 
-  const mission2Score =
-    scoreMap.get(2) ??
-    missionTwoScore;
+  const mission2Score = scoreMap.get(2) ?? missionTwoScore;
 
   const mission3Score =
-    scoreMap.get(3) ??
-    Number(
-      currentLeaderboard
-        ?.mission_3_score ??
-      0
-    );
+    scoreMap.get(3) ?? Number(currentLeaderboard?.mission_3_score ?? 0);
 
   const mission4Score =
-    scoreMap.get(4) ??
-    Number(
-      currentLeaderboard
-        ?.mission_4_score ??
-      0
-    );
+    scoreMap.get(4) ?? Number(currentLeaderboard?.mission_4_score ?? 0);
 
   const totalScore =
-    mission1Score +
-    mission2Score +
-    mission3Score +
-    mission4Score;
+    mission1Score + mission2Score + mission3Score + mission4Score;
 
-  const completedCount =
-    [
-      mission1Score,
-      mission2Score,
-      mission3Score,
-      mission4Score,
-    ].filter(
-      (score) =>
-        score > 0
-    ).length;
+  const completedCount = [
+    mission1Score,
+    mission2Score,
+    mission3Score,
+    mission4Score,
+  ].filter((score) => score > 0).length;
 
   const leaderboardPayload = {
-    alias:
-      playerAlias?.trim() ||
-      currentLeaderboard
-        ?.alias ||
-      'Agent',
+    alias: playerAlias?.trim() || currentLeaderboard?.alias || 'Agent',
 
-    mission_1_score:
-      mission1Score,
+    mission_1_score: mission1Score,
 
-    mission_2_score:
-      mission2Score,
+    mission_2_score: mission2Score,
 
-    mission_3_score:
-      mission3Score,
+    mission_3_score: mission3Score,
 
-    mission_4_score:
-      mission4Score,
+    mission_4_score: mission4Score,
 
-    total_score:
-      totalScore,
+    total_score: totalScore,
 
-    completed_count:
-      completedCount,
+    completed_count: completedCount,
 
-    updated_at:
-      now,
+    updated_at: now,
   };
 
   if (currentLeaderboard) {
-    const {
-      error:
-        leaderboardUpdateError,
-    } =
-      await admin
-        .from('leaderboard_entries')
-        .update(
-          leaderboardPayload
-        )
-        .eq(
-          'player_id',
-          playerId
-        );
+    const { error: leaderboardUpdateError } = await admin
+      .from('leaderboard_entries')
+      .update(leaderboardPayload)
+      .eq('player_id', playerId);
 
     if (leaderboardUpdateError) {
       throw new Error(
-        `Unable to update the leaderboard: ${leaderboardUpdateError.message}`
+        `Unable to update the leaderboard: ${leaderboardUpdateError.message}`,
       );
     }
   } else {
-    const {
-      error:
-        leaderboardInsertError,
-    } =
-      await admin
-        .from('leaderboard_entries')
-        .insert({
-          player_id:
-            playerId,
+    const { error: leaderboardInsertError } = await admin
+      .from('leaderboard_entries')
+      .insert({
+        player_id: playerId,
 
-          ...leaderboardPayload,
-        });
+        ...leaderboardPayload,
+      });
 
     if (leaderboardInsertError) {
       throw new Error(
-        `Unable to create the leaderboard entry: ${leaderboardInsertError.message}`
+        `Unable to create the leaderboard entry: ${leaderboardInsertError.message}`,
       );
     }
   }
@@ -1063,74 +483,35 @@ async function finalizeMissionTwoScore({
   };
 }
 
-
 // ==================================
 // SUBMIT MISSION TWO ROOM
 // ==================================
 
-
-
 export async function submitMissionTwoRoom(
-
   request: Request,
 
-  roomNumber: number
-
+  roomNumber: number,
 ) {
-
   try {
-
     // ----------------------------------
 
     // LOAD ROOM CONFIG
 
     // ----------------------------------
 
+    const config = getMissionTwoRoom(roomNumber);
 
-
-    const config =
-
-      getMissionTwoRoom(
-
-        roomNumber
-
-      );
-
-
-
-    if (
-
-      !config ||
-
-      roomNumber < 2 ||
-
-      roomNumber > 10
-
-    ) {
-
+    if (!config || roomNumber < 2 || roomNumber > 10) {
       return NextResponse.json(
-
         {
-
-          message:
-
-            'Unknown Mission 02 room.',
-
+          message: 'Unknown Mission 02 room.',
         },
 
         {
-
           status: 404,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -1138,57 +519,23 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
-
-
-    const supabase =
-
-      await createClient();
-
-
+    const supabase = await createClient();
 
     const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      data: {
-
-        user,
-
-      },
-
-    } =
-
-      await supabase.auth.getUser();
-
-
-
-    if (
-
-      !user
-
-    ) {
-
+    if (!user) {
       return NextResponse.json(
-
         {
-
-          message:
-
-            'You must be signed in.',
-
+          message: 'You must be signed in.',
         },
 
         {
-
           status: 401,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -1196,23 +543,9 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
+    const body = await request.json();
 
-
-    const body =
-
-      await request.json();
-
-
-
-    const previewMode =
-
-      body?.previewMode ===
-
-      true;
-
-
-
-
+    const previewMode = body?.previewMode === true;
 
     // ----------------------------------
 
@@ -1220,75 +553,39 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
+    const { data: profile } = await supabase
 
+      .from('profiles')
 
-    const {
-
-      data:
-
-        profile,
-
-    } =
-
-      await supabase
-
-        .from(
-
-          'profiles'
-
-        )
-
-        .select(`
+      .select(
+        `
           id,
           alias,
           role,
           is_active,
           onboarding_complete
-        `)
+        `,
+      )
 
-        .eq(
+      .eq(
+        'id',
 
-          'id',
+        user.id,
+      )
 
-          user.id
+      .single();
 
-        )
-
-        .single();
-
-
-
-    if (
-
-      !profile ||
-
-      !profile.is_active
-
-    ) {
-
+    if (!profile || !profile.is_active) {
       return NextResponse.json(
-
         {
-
-          message:
-
-            'Unable to verify your account.',
-
+          message: 'Unable to verify your account.',
         },
 
         {
-
           status: 403,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ==================================
 
@@ -1296,43 +593,17 @@ export async function submitMissionTwoRoom(
 
     // ==================================
 
-
-
     const roomFiveValidation =
-
-      roomNumber === 5
-
-        ? validateMissionTwoRoomFive(
-
-            body?.worksheet
-
-          )
-
-        : null;
-
-
+      roomNumber === 5 ? validateMissionTwoRoomFive(body?.worksheet) : null;
 
     const correct =
-
       roomNumber === 5
-
-        ? roomFiveValidation
-
-            ?.correct ===
-
-          true
-
+        ? roomFiveValidation?.correct === true
         : validateRoom(
-
             roomNumber,
 
-            body
-
+            body,
           );
-
-
-
-
 
     // ==================================
 
@@ -1360,37 +631,16 @@ export async function submitMissionTwoRoom(
 
     // ==================================
 
-
-
     const awardedFragment =
-
-      correct &&
-
-      roomNumber >= 2 &&
-
-      roomNumber <= 8
-
+      correct && roomNumber >= 2 && roomNumber <= 8
         ? previewMode
-
-          ? getMissionTwoPreviewFragment(
-
-              roomNumber
-
-            )
-
+          ? getMissionTwoPreviewFragment(roomNumber)
           : getMissionTwoFragment(
-
               user.id,
 
-              roomNumber
-
+              roomNumber,
             )
-
         : null;
-
-
-
-
 
     // ==================================
 
@@ -1406,147 +656,51 @@ export async function submitMissionTwoRoom(
 
     // ==================================
 
-
-
-    if (
-
-      previewMode
-
-    ) {
-
-      if (
-
-        profile.role !==
-
-        'admin'
-
-      ) {
-
+    if (previewMode) {
+      if (profile.role !== 'admin') {
         return NextResponse.json(
-
           {
-
-            message:
-
-              'Admin preview is not available for this account.',
-
+            message: 'Admin preview is not available for this account.',
           },
 
           {
-
             status: 403,
-
-          }
-
+          },
         );
-
       }
 
-
-
       return NextResponse.json({
+        ok: true,
 
-        ok:
-
-          true,
-
-
-
-        preview:
-
-          true,
-
-
+        preview: true,
 
         correct,
 
+        score: correct ? config.score : 0,
 
-
-        score:
-
-          correct
-
-            ? config.score
-
-            : 0,
-
-
-
-        clue:
-
-          awardedFragment,
-
-
+        clue: awardedFragment,
 
         ...(roomFiveValidation
-
           ? {
+              verifiedCount: roomFiveValidation.verifiedCount,
 
-              verifiedCount:
+              totalFields: roomFiveValidation.totalFields,
 
-                roomFiveValidation
-
-                  .verifiedCount,
-
-
-
-              totalFields:
-
-                roomFiveValidation
-
-                  .totalFields,
-
-
-
-              fieldResults:
-
-                roomFiveValidation
-
-                  .fieldResults,
-
+              fieldResults: roomFiveValidation.fieldResults,
             }
-
           : {}),
 
-
-
-        message:
-
-          correct
-
-            ? roomNumber ===
-
-              10
-
-              ? 'ACCESS GRANTED. Final escape code accepted.'
-
-              : roomNumber ===
-
-                  5
-
-                ? 'FORENSIC REPORT VERIFIED. All twelve metadata fields have been confirmed.'
-
-                : roomNumber ===
-
-                    8
-
-                  ? 'Attack reconstructed. Room cleared and final fragment recovered.'
-
-                  : 'Correct. Room cleared.'
-
-            : incorrectMessage(
-
-                roomNumber
-
-              ),
-
+        message: correct
+          ? roomNumber === 10
+            ? 'ACCESS GRANTED. Final escape code accepted.'
+            : roomNumber === 5
+              ? 'FORENSIC REPORT VERIFIED. All twelve metadata fields have been confirmed.'
+              : roomNumber === 8
+                ? 'Attack reconstructed. Room cleared and final fragment recovered.'
+                : 'Correct. Room cleared.'
+          : incorrectMessage(roomNumber),
       });
-
     }
-
-
-
-
 
     // ==================================
 
@@ -1554,49 +708,23 @@ export async function submitMissionTwoRoom(
 
     // ==================================
 
-
-
-
-
     // ----------------------------------
 
     // ADMINS CANNOT PLAY LIVE
 
     // ----------------------------------
 
-
-
-    if (
-
-      profile.role ===
-
-      'admin'
-
-    ) {
-
+    if (profile.role === 'admin') {
       return NextResponse.json(
-
         {
-
-          message:
-
-            'Use admin preview to test Mission 02.',
-
+          message: 'Use admin preview to test Mission 02.',
         },
 
         {
-
           status: 403,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -1604,37 +732,17 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
-
-
-    if (
-
-      !profile.onboarding_complete
-
-    ) {
-
+    if (!profile.onboarding_complete) {
       return NextResponse.json(
-
         {
-
-          message:
-
-            'Complete onboarding before playing Mission 02.',
-
+          message: 'Complete onboarding before playing Mission 02.',
         },
 
         {
-
           status: 403,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -1642,25 +750,12 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
+    const { data: attempt } = await supabase
 
+      .from('mission_attempts')
 
-    const {
-
-      data:
-
-        attempt,
-
-    } =
-
-      await supabase
-
-        .from(
-
-          'mission_attempts'
-
-        )
-
-        .select(`
+      .select(
+        `
 
           id,
 
@@ -1668,57 +763,34 @@ export async function submitMissionTwoRoom(
 
           current_stage
 
-        `)
+        `,
+      )
 
-        .eq(
+      .eq(
+        'player_id',
 
-          'player_id',
+        user.id,
+      )
 
-          user.id
+      .eq(
+        'mission_id',
 
-        )
+        2,
+      )
 
-        .eq(
+      .maybeSingle();
 
-          'mission_id',
-
-          2
-
-        )
-
-        .maybeSingle();
-
-
-
-    if (
-
-      !attempt
-
-    ) {
-
+    if (!attempt) {
       return NextResponse.json(
-
         {
-
-          message:
-
-            'Mission 02 attempt could not be loaded.',
-
+          message: 'Mission 02 attempt could not be loaded.',
         },
 
         {
-
           status: 400,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -1726,39 +798,17 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
-
-
-    if (
-
-      attempt.status !==
-
-      'active'
-
-    ) {
-
+    if (attempt.status !== 'active') {
       return NextResponse.json(
-
         {
-
-          message:
-
-            'Mission 02 is not active.',
-
+          message: 'Mission 02 is not active.',
         },
 
         {
-
           status: 409,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -1766,45 +816,19 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
+    const expectedStage = `room-${roomNumber}`;
 
-
-    const expectedStage =
-
-      `room-${roomNumber}`;
-
-
-
-    if (
-
-      attempt.current_stage !==
-
-      expectedStage
-
-    ) {
-
+    if (attempt.current_stage !== expectedStage) {
       return NextResponse.json(
-
         {
-
-          message:
-
-            'This is not your current mission room.',
-
+          message: 'This is not your current mission room.',
         },
 
         {
-
           status: 409,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -1812,87 +836,29 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
-
-
-    if (
-
-      !correct
-
-    ) {
-
+    if (!correct) {
       return NextResponse.json({
+        ok: true,
 
-        ok:
+        correct: false,
 
-          true,
+        score: 0,
 
-
-
-        correct:
-
-          false,
-
-
-
-        score:
-
-          0,
-
-
-
-        clue:
-
-          null,
-
-
+        clue: null,
 
         ...(roomFiveValidation
-
           ? {
+              verifiedCount: roomFiveValidation.verifiedCount,
 
-              verifiedCount:
+              totalFields: roomFiveValidation.totalFields,
 
-                roomFiveValidation
-
-                  .verifiedCount,
-
-
-
-              totalFields:
-
-                roomFiveValidation
-
-                  .totalFields,
-
-
-
-              fieldResults:
-
-                roomFiveValidation
-
-                  .fieldResults,
-
+              fieldResults: roomFiveValidation.fieldResults,
             }
-
           : {}),
 
-
-
-        message:
-
-          incorrectMessage(
-
-            roomNumber
-
-          ),
-
+        message: incorrectMessage(roomNumber),
       });
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -1900,60 +866,31 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
-
-
-    const nextStage =
-
-      roomNumber ===
-
-      10
-
-        ? 'report'
-
-        : `room-${
-
-            roomNumber +
-
-            1
-
-          }`;
+    const nextStage = roomNumber === 10 ? 'report' : `room-${roomNumber + 1}`;
 
     // ==================================
     // ROOM 10 — SAVE OFFICIAL SCORE
     // ==================================
 
-    let missionTwoResult:
-      {
-        missionTwoScore: number;
-        totalScore: number;
-        completedCount: number;
-      } |
-      null =
-        null;
+    let missionTwoResult: {
+      missionTwoScore: number;
+      totalScore: number;
+      completedCount: number;
+    } | null = null;
 
-    if (
-      roomNumber ===
-      10
-    ) {
+    if (roomNumber === 10) {
       try {
-        missionTwoResult =
-          await finalizeMissionTwoScore({
-            playerId:
-              user.id,
+        missionTwoResult = await finalizeMissionTwoScore({
+          playerId: user.id,
 
-            playerAlias:
-              profile.alias ??
-              null,
+          playerAlias: profile.alias ?? null,
 
-            attemptId:
-              attempt.id,
-          });
-      } catch (
-        scoringError
-      ) {
+          attemptId: attempt.id,
+        });
+      } catch (scoringError) {
         console.error(
           '[MISSION 02] Unable to save official score:',
-          scoringError
+          scoringError,
         );
 
         return NextResponse.json(
@@ -1962,17 +899,11 @@ export async function submitMissionTwoRoom(
               'Your final code was correct, but the official Mission 02 score could not be saved. Please try again.',
           },
           {
-            status:
-              500,
-          }
+            status: 500,
+          },
         );
       }
     }
-
-
-
-
-
 
     // ----------------------------------
 
@@ -1980,99 +911,52 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
-
-
     const {
+      data: updatedAttempt,
 
-      data:
+      error: updateError,
+    } = await supabase
 
-        updatedAttempt,
+      .from('mission_attempts')
 
+      .update({
+        current_stage: nextStage,
 
+        ...(roomNumber === 10
+          ? {
+              status: 'submitted',
 
-      error:
+              completed_at: new Date().toISOString(),
+            }
+          : {}),
+      })
 
-        updateError,
+      .eq(
+        'id',
 
-    } =
+        attempt.id,
+      )
 
-      await supabase
+      .eq(
+        'player_id',
 
-        .from(
+        user.id,
+      )
 
-          'mission_attempts'
+      .eq(
+        'mission_id',
 
-        )
+        2,
+      )
 
-        .update({
+      .eq(
+        'current_stage',
 
-          current_stage:
+        expectedStage,
+      )
 
-            nextStage,
-
-
-
-          ...(
-
-            roomNumber ===
-
-            10
-
-              ? {
-
-                  status:
-
-                    'submitted',
-
-
-
-                  completed_at:
-
-                    new Date()
-
-                      .toISOString(),
-
-                }
-
-              : {}
-
-          ),
-
-        })
-
-        .eq(
-
-          'id',
-
-          attempt.id
-
-        )
-
-        .eq(
-
-          'player_id',
-
-          user.id
-
-        )
-
-        .eq(
-
-          'mission_id',
-
-          2
-
-        )
-
-        .eq(
-
-          'current_stage',
-
-          expectedStage
-
-        )
-
-        .select(`
+      .select(
+        `
 
           id,
 
@@ -2080,53 +964,29 @@ export async function submitMissionTwoRoom(
 
           current_stage
 
-        `)
+        `,
+      )
 
-        .single();
+      .single();
 
-
-
-    if (
-
-      updateError ||
-
-      !updatedAttempt
-
-    ) {
-
+    if (updateError || !updatedAttempt) {
       console.error(
-
         `[MISSION 02 ROOM ${roomNumber}] Unable to advance stage:`,
 
-        updateError
-
+        updateError,
       );
 
-
-
       return NextResponse.json(
-
         {
-
           message:
-
             'Your answer was correct, but your progress could not be saved. Please try again.',
-
         },
 
         {
-
           status: 500,
-
-        }
-
+        },
       );
-
     }
-
-
-
-
 
     // ----------------------------------
 
@@ -2134,27 +994,12 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
-
-
     return NextResponse.json({
+      ok: true,
 
-      ok:
+      correct: true,
 
-        true,
-
-
-
-      correct:
-
-        true,
-
-
-
-      score:
-
-        config.score,
-
-
+      score: config.score,
 
       /*
 
@@ -2174,124 +1019,54 @@ export async function submitMissionTwoRoom(
 
       */
 
-      clue:
-
-        awardedFragment,
-
-
+      clue: awardedFragment,
 
       ...(roomFiveValidation
-
         ? {
+            verifiedCount: roomFiveValidation.verifiedCount,
 
-            verifiedCount:
+            totalFields: roomFiveValidation.totalFields,
 
-              roomFiveValidation
-
-                .verifiedCount,
-
-
-
-            totalFields:
-
-              roomFiveValidation
-
-                .totalFields,
-
-
-
-            fieldResults:
-
-              roomFiveValidation
-
-                .fieldResults,
-
+            fieldResults: roomFiveValidation.fieldResults,
           }
-
         : {}),
 
-
-
       message:
-
-        roomNumber ===
-
-        10
-
+        roomNumber === 10
           ? 'ACCESS GRANTED. Final escape code accepted.'
-
-          : roomNumber ===
-
-              5
-
+          : roomNumber === 5
             ? 'FORENSIC REPORT VERIFIED. All twelve metadata fields have been confirmed.'
-
-            : roomNumber ===
-
-                8
-
+            : roomNumber === 8
               ? 'Attack reconstructed. Room cleared and final fragment recovered.'
-
               : 'Correct. Room cleared.',
 
-
-
-      nextStage:
-        updatedAttempt
-          .current_stage,
+      nextStage: updatedAttempt.current_stage,
 
       ...(missionTwoResult
         ? {
-            missionTotalScore:
-              missionTwoResult
-                .missionTwoScore,
+            missionTotalScore: missionTwoResult.missionTwoScore,
 
-            cumulativeScore:
-              missionTwoResult
-                .totalScore,
+            cumulativeScore: missionTwoResult.totalScore,
 
-            completedMissions:
-              missionTwoResult
-                .completedCount,
+            completedMissions: missionTwoResult.completedCount,
           }
         : {}),
-
-});
-
-  } catch (
-
-    error
-
-  ) {
-
+    });
+  } catch (error) {
     console.error(
-
       '[MISSION 02 ROOM SUBMIT] Failed:',
 
-      error
-
+      error,
     );
 
-
-
     return NextResponse.json(
-
       {
-
-        message:
-
-          'Unable to submit this room.',
-
+        message: 'Unable to submit this room.',
       },
 
       {
-
         status: 500,
-
-      }
-
+      },
     );
-
   }
-
 }
