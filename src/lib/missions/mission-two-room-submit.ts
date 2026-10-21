@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+import { writeErrorAuditLog } from '@/lib/audit';
+
 import { randomUUID } from 'crypto';
 
 import { getMissionTwoRoom } from '@/lib/missions/mission-two-rooms';
@@ -136,6 +138,7 @@ function sameSet(
 function validateRoom(
   roomNumber: number,
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- request body is dynamic client JSON
   body: any,
 ) {
   const selectedIds = Array.isArray(body?.selectedIds)
@@ -492,6 +495,8 @@ export async function submitMissionTwoRoom(
 
   roomNumber: number,
 ) {
+  let authedUserId: string | null = null;
+
   try {
     // ----------------------------------
 
@@ -537,6 +542,8 @@ export async function submitMissionTwoRoom(
       );
     }
 
+    authedUserId = user.id;
+
     // ----------------------------------
 
     // READ SUBMISSION
@@ -563,7 +570,8 @@ export async function submitMissionTwoRoom(
           alias,
           role,
           is_active,
-          onboarding_complete
+          onboarding_complete,
+          work_location_type
         `,
       )
 
@@ -746,6 +754,24 @@ export async function submitMissionTwoRoom(
 
     // ----------------------------------
 
+    // WORKGROUP CHECK
+
+    // ----------------------------------
+
+    if (!profile.work_location_type) {
+      return NextResponse.json(
+        {
+          message: 'Choose your department or branch before playing Mission 02.',
+        },
+
+        {
+          status: 403,
+        },
+      );
+    }
+
+    // ----------------------------------
+
     // LOAD ACTIVE MISSION ATTEMPT
 
     // ----------------------------------
@@ -893,6 +919,18 @@ export async function submitMissionTwoRoom(
           scoringError,
         );
 
+        await writeErrorAuditLog({
+          actorId: user.id,
+          actorAlias: profile.alias,
+          actorRole: 'player',
+          action: 'MISSION_COMPLETE_FAILED',
+          targetType: 'mission',
+          targetId: '2',
+          description: 'Mission 02 final code was correct, but the official score could not be saved.',
+          error: scoringError,
+          context: { stage: 'finalize_score' },
+        });
+
         return NextResponse.json(
           {
             message:
@@ -976,6 +1014,18 @@ export async function submitMissionTwoRoom(
         updateError,
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorAlias: profile.alias,
+        actorRole: 'player',
+        action: 'MISSION_SUBMIT_FAILED',
+        targetType: 'mission',
+        targetId: '2',
+        description: `Room ${roomNumber} answer was correct, but progress could not be saved.`,
+        error: updateError ?? new Error('Stage update returned no row.'),
+        context: { stage: 'advance_stage', roomNumber },
+      });
+
       return NextResponse.json(
         {
           message:
@@ -1058,6 +1108,17 @@ export async function submitMissionTwoRoom(
 
       error,
     );
+
+    await writeErrorAuditLog({
+      actorId: authedUserId,
+      actorRole: authedUserId ? 'player' : null,
+      action: 'MISSION_SUBMIT_FAILED',
+      targetType: 'mission',
+      targetId: '2',
+      description: `Unexpected error submitting room ${roomNumber}.`,
+      error,
+      context: { stage: 'unexpected', roomNumber },
+    });
 
     return NextResponse.json(
       {

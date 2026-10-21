@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -790,10 +791,12 @@ export default function MissionOneEvidenceRoom({
   playerAlias,
   playerId,
   initialReviews,
+  previewMode = false,
 }: {
   playerAlias: string;
   playerId: string;
   initialReviews: SavedReview[];
+  previewMode?: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -855,26 +858,28 @@ export default function MissionOneEvidenceRoom({
         classification
       );
 
-      const { error: reviewError } = await supabase
-        .from('mission_evidence_reviews')
-        .upsert(
-          {
-            player_id: playerId,
-            mission_id: 1,
-            evidence_id: itemId,
-            classification: valueForDatabase,
-            notes: notes.trim(),
-            reviewed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict:
-              'player_id,mission_id,evidence_id',
-          }
-        );
+      if (!previewMode) {
+        const { error: reviewError } = await supabase
+          .from('mission_evidence_reviews')
+          .upsert(
+            {
+              player_id: playerId,
+              mission_id: 1,
+              evidence_id: itemId,
+              classification: valueForDatabase,
+              notes: notes.trim(),
+              reviewed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            {
+              onConflict:
+                'player_id,mission_id,evidence_id',
+            }
+          );
 
-      if (reviewError) {
-        throw new Error(reviewError.message);
+        if (reviewError) {
+          throw new Error(reviewError.message);
+        }
       }
 
       const correct =
@@ -915,19 +920,25 @@ export default function MissionOneEvidenceRoom({
     setContinueError('');
 
     try {
-      const { error: stageError } = await supabase
-        .from('mission_attempts')
-        .update({
-          current_stage: 'theory',
-        })
-        .eq('player_id', playerId)
-        .eq('mission_id', 1);
+      if (!previewMode) {
+        const { error: stageError } = await supabase
+          .from('mission_attempts')
+          .update({
+            current_stage: 'theory',
+          })
+          .eq('player_id', playerId)
+          .eq('mission_id', 1);
 
-      if (stageError) {
-        throw new Error(stageError.message);
+        if (stageError) {
+          throw new Error(stageError.message);
+        }
       }
 
-      router.push('/missions/1/play/theory');
+      router.push(
+        previewMode
+          ? '/admin/missions/1/preview/theory'
+          : '/missions/1/play/theory'
+      );
     } catch (error) {
       setContinueError(
         error instanceof Error
@@ -953,19 +964,43 @@ export default function MissionOneEvidenceRoom({
               </h1>
             </div>
 
-            <div className="text-right">
-              <p className="text-xs uppercase text-slate-500">
-                Operative
-              </p>
-              <p className="font-bold">
-                {playerAlias}
-              </p>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-xs uppercase text-slate-500">
+                  {previewMode ? 'Administrator' : 'Operative'}
+                </p>
+                <p className="font-bold">
+                  {playerAlias}
+                </p>
+              </div>
+
+              {previewMode && (
+                <Link
+                  href="/admin"
+                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 hover:border-cyan-600"
+                >
+                  Exit Preview
+                </Link>
+              )}
             </div>
           </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        {previewMode && (
+          <div className="mb-6 rounded-xl border border-amber-600/60 bg-amber-950/20 px-5 py-4">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">
+              Admin Preview Mode
+            </p>
+
+            <p className="mt-1 text-sm text-slate-300">
+              Answers are checked using the same logic as the live game, but no
+              player attempt, score or leaderboard data is written.
+            </p>
+          </div>
+        )}
+
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-400">

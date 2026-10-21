@@ -28,7 +28,8 @@ export async function requireMissionTwoPlayerRoom(
       alias,
       role,
       is_active,
-      onboarding_complete
+      onboarding_complete,
+      work_location_type
     `)
     .eq('id', user.id)
     .single();
@@ -50,6 +51,10 @@ export async function requireMissionTwoPlayerRoom(
 
   if (!profile.onboarding_complete) {
     redirect('/onboarding');
+  }
+
+  if (!profile.work_location_type) {
+    redirect('/select-workgroup');
   }
 
   const {

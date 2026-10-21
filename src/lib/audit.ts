@@ -58,3 +58,54 @@ export async function writeAuditLog(
     );
   }
 }
+
+export type AuditErrorEvent = {
+  actorId?: string | null;
+  actorAlias?: string | null;
+  actorRole?: string | null;
+
+  // e.g. 'WORKGROUP_SELECTION_FAILED' — the admin audit UI automatically
+  // flags any action containing "FAILED" in red.
+  action: string;
+
+  targetType?: string | null;
+  targetId?: string | null;
+
+  description: string;
+
+  // The caught error — message (and stack, when available) are recorded
+  // so a failure can be diagnosed from the admin Audit Log without server
+  // console access.
+  error: unknown;
+
+  context?: Record<string, unknown>;
+};
+
+export async function writeErrorAuditLog(
+  event: AuditErrorEvent
+) {
+  const errorMessage =
+    event.error instanceof Error
+      ? event.error.message
+      : String(event.error);
+
+  const errorStack =
+    event.error instanceof Error
+      ? event.error.stack
+      : undefined;
+
+  await writeAuditLog({
+    actorId: event.actorId,
+    actorAlias: event.actorAlias,
+    actorRole: event.actorRole,
+    action: event.action,
+    targetType: event.targetType,
+    targetId: event.targetId,
+    description: event.description,
+    metadata: {
+      ...event.context,
+      errorMessage,
+      ...(errorStack ? { errorStack } : {}),
+    },
+  });
+}

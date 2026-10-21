@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { writeErrorAuditLog } from '@/lib/audit';
 import {
   isValidUsername,
   normalizeUsername,
@@ -64,6 +65,14 @@ export async function POST(request: Request) {
         '[REGISTER] Username lookup failed:',
         profileLookupError
       );
+
+      await writeErrorAuditLog({
+        actorAlias: username,
+        action: 'REGISTRATION_FAILED',
+        description: `Username lookup failed while registering "${username}".`,
+        error: profileLookupError,
+        context: { stage: 'username_lookup', username },
+      });
 
       return NextResponse.json(
         {
@@ -133,6 +142,14 @@ export async function POST(request: Request) {
         );
       }
 
+      await writeErrorAuditLog({
+        actorAlias: username,
+        action: 'REGISTRATION_FAILED',
+        description: `Auth account creation failed while registering "${username}".`,
+        error: createError,
+        context: { stage: 'auth_user_creation', username },
+      });
+
       return NextResponse.json(
         {
           code: 'AUTH_USER_CREATION_FAILED',
@@ -200,6 +217,14 @@ export async function POST(request: Request) {
         );
       }
 
+      await writeErrorAuditLog({
+        actorAlias: username,
+        action: 'REGISTRATION_FAILED',
+        description: `Profile creation failed while registering "${username}" (auth account was rolled back).`,
+        error: profileError,
+        context: { stage: 'profile_creation', username },
+      });
+
       return NextResponse.json(
         {
           code: 'PROFILE_CREATION_FAILED',
@@ -227,6 +252,8 @@ export async function POST(request: Request) {
       error
     );
 
+    let rollbackFailed = false;
+
     if (createdUserId) {
       try {
         const admin = createAdminClient();
@@ -235,12 +262,25 @@ export async function POST(request: Request) {
           createdUserId
         );
       } catch (rollbackError) {
+        rollbackFailed = true;
+
         console.error(
           '[REGISTER] Rollback failed:',
           rollbackError
         );
       }
     }
+
+    await writeErrorAuditLog({
+      action: 'REGISTRATION_FAILED',
+      description: 'Unexpected error during registration.',
+      error,
+      context: {
+        stage: 'unexpected',
+        rollbackAttempted: Boolean(createdUserId),
+        rollbackFailed,
+      },
+    });
 
     return NextResponse.json(
       {

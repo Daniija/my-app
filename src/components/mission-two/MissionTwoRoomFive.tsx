@@ -246,6 +246,7 @@ export default function MissionTwoRoomFive({
   const [score, setScore] = useState<number | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears answers on mount so a remounted room starts blank
     setAnswers(EMPTY_ANSWERS);
   }, []);
 

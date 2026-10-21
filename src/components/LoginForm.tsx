@@ -23,7 +23,7 @@ function friendlyAuthError(
       'invalid login credentials'
     )
   ) {
-    return 'Username or password is incorrect.';
+    return 'Name or password is incorrect.';
   }
 
   if (
@@ -40,7 +40,7 @@ function friendlyAuthError(
       'valid username'
     )
   ) {
-    return 'Enter a valid username using 3–20 letters, numbers, underscores or hyphens.';
+    return 'Enter a valid name using 3–20 letters, numbers, underscores or hyphens.';
   }
 
   return 'We could not sign you in. Please try again. If the problem continues, contact IT.';
@@ -93,7 +93,7 @@ export default function LoginForm() {
       )
     ) {
       throw new Error(
-        'Enter a valid username using 3–20 letters, numbers, underscores or hyphens.'
+        'Enter a valid name using 3–20 letters, numbers, underscores or hyphens.'
       );
     }
 
@@ -195,7 +195,7 @@ export default function LoginForm() {
       )
     ) {
       throw new Error(
-        'Username must be 3–20 characters and use only letters, numbers, underscores or hyphens.'
+        'Name must be 3–20 characters and use only letters, numbers, underscores or hyphens.'
       );
     }
 
@@ -426,7 +426,7 @@ export default function LoginForm() {
             htmlFor="username"
             className="mb-2 block text-sm font-bold"
           >
-            Username
+            Name
           </label>
 
           <input
@@ -456,7 +456,7 @@ export default function LoginForm() {
               Letters, numbers,
               underscores and
               hyphens only. Your
-              username stays
+              name stays
               private.
             </p>
           )}

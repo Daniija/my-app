@@ -3,10 +3,13 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { validatePassword } from '@/lib/auth/username';
+import { writeErrorAuditLog } from '@/lib/audit';
 
 export async function POST(
   request: Request
 ) {
+  let authedUserId: string | null = null;
+
   try {
     const supabase =
       await createClient();
@@ -27,6 +30,8 @@ export async function POST(
         }
       );
     }
+
+    authedUserId = user.id;
 
     const {
       data: adminProfile,
@@ -184,6 +189,17 @@ export async function POST(
         authError
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'admin',
+        action: 'PASSWORD_RESET_RESOLVE_FAILED',
+        targetType: 'player',
+        targetId: player.id,
+        description: `Unable to update the Auth password for player ${player.id}.`,
+        error: authError,
+        context: { stage: 'update_auth_password', requestId },
+      });
+
       return NextResponse.json(
         {
           message:
@@ -215,6 +231,17 @@ export async function POST(
         '[PASSWORD RESET] Unable to set must_change_password:',
         profileError
       );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'admin',
+        action: 'PASSWORD_RESET_RESOLVE_FAILED',
+        targetType: 'player',
+        targetId: player.id,
+        description: `Password changed for player ${player.id}, but must_change_password could not be set.`,
+        error: profileError,
+        context: { stage: 'set_must_change_password', requestId },
+      });
 
       return NextResponse.json(
         {
@@ -250,6 +277,17 @@ export async function POST(
         '[PASSWORD RESET] Unable to mark request resolved:',
         resolveError
       );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'admin',
+        action: 'PASSWORD_RESET_RESOLVE_FAILED',
+        targetType: 'player',
+        targetId: player.id,
+        description: `Password was reset for player ${player.id}, but the request could not be marked resolved.`,
+        error: resolveError,
+        context: { stage: 'mark_resolved', requestId },
+      });
     }
 
     return NextResponse.json({
@@ -262,6 +300,15 @@ export async function POST(
       '[PASSWORD RESET]',
       error
     );
+
+    await writeErrorAuditLog({
+      actorId: authedUserId,
+      actorRole: authedUserId ? 'admin' : null,
+      action: 'PASSWORD_RESET_RESOLVE_FAILED',
+      description: 'Unexpected error while resolving a password reset request.',
+      error,
+      context: { stage: 'unexpected' },
+    });
 
     return NextResponse.json(
       {

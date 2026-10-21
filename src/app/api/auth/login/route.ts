@@ -14,6 +14,10 @@ import {
   usernameToAuthEmail,
 } from '@/lib/auth/username';
 
+import {
+  writeErrorAuditLog,
+} from '@/lib/audit';
+
 
 export const runtime =
   'nodejs';
@@ -84,6 +88,10 @@ function invalidCredentials() {
 export async function POST(
   request: Request
 ) {
+  // Tracked outside the try block so the catch-all handler below can still
+  // attach context even if something throws before `name` is in scope.
+  let attemptedName: string | null = null;
+
   try {
     // ----------------------------------
     // READ REQUEST
@@ -112,6 +120,8 @@ export async function POST(
       normalizeName(
         submittedName
       );
+
+    attemptedName = name;
 
 
     // ----------------------------------
@@ -189,7 +199,8 @@ export async function POST(
           role,
           is_active,
           onboarding_complete,
-          must_change_password
+          must_change_password,
+          work_location_type
         `)
         .ilike(
           'name',
@@ -207,6 +218,14 @@ export async function POST(
         '[LOGIN] Unable to look up player profile:',
         lookupError
       );
+
+      await writeErrorAuditLog({
+        actorAlias: name,
+        action: 'LOGIN_FAILED',
+        description: `Profile lookup failed while logging in as "${name}".`,
+        error: lookupError,
+        context: { stage: 'profile_lookup' },
+      });
 
       return NextResponse.json(
         {
@@ -254,6 +273,14 @@ export async function POST(
         name
       );
 
+      await writeErrorAuditLog({
+        actorAlias: name,
+        action: 'LOGIN_FAILED',
+        description: `More than one profile matched the name "${name}".`,
+        error: new Error(`Duplicate name: ${profiles.length} profiles matched "${name}".`),
+        context: { stage: 'duplicate_name', matchCount: profiles.length },
+      });
+
       return NextResponse.json(
         {
           ok: false,
@@ -300,6 +327,18 @@ export async function POST(
         profile.id
       );
 
+      await writeErrorAuditLog({
+        actorId: profile.id,
+        actorAlias: profile.alias ?? name,
+        actorRole: profile.role ?? 'player',
+        action: 'LOGIN_FAILED',
+        targetType: 'player',
+        targetId: profile.id,
+        description: `Profile ${profile.alias ?? name} is missing its private username.`,
+        error: new Error('Profile is missing its private username.'),
+        context: { stage: 'missing_username' },
+      });
+
       return NextResponse.json(
         {
           ok: false,
@@ -337,6 +376,18 @@ export async function POST(
         '[LOGIN] Unable to generate authentication email:',
         error
       );
+
+      await writeErrorAuditLog({
+        actorId: profile.id,
+        actorAlias: profile.alias ?? name,
+        actorRole: profile.role ?? 'player',
+        action: 'LOGIN_FAILED',
+        targetType: 'player',
+        targetId: profile.id,
+        description: `Unable to generate an authentication email for ${profile.alias ?? name}.`,
+        error,
+        context: { stage: 'generate_auth_email' },
+      });
 
       return NextResponse.json(
         {
@@ -409,6 +460,21 @@ export async function POST(
         '[LOGIN] Authentication/profile ID mismatch.'
       );
 
+      await writeErrorAuditLog({
+        actorId: profile.id,
+        actorAlias: profile.alias ?? name,
+        actorRole: profile.role ?? 'player',
+        action: 'LOGIN_FAILED',
+        targetType: 'player',
+        targetId: profile.id,
+        description: `Authentication/profile ID mismatch for ${profile.alias ?? name}.`,
+        error: new Error('Authentication user ID did not match the profile ID.'),
+        context: {
+          stage: 'id_mismatch',
+          authUserId: authData.user.id,
+        },
+      });
+
       await supabase.auth
         .signOut();
 
@@ -466,6 +532,16 @@ export async function POST(
         '/onboarding';
     }
 
+    // Players who have not yet chosen
+    // a department or branch must do
+    // so before reaching the dashboard.
+    else if (
+      !profile.work_location_type
+    ) {
+      redirectTo =
+        '/select-workgroup';
+    }
+
 
     // ==================================
     // SUCCESS
@@ -484,6 +560,14 @@ export async function POST(
       '[LOGIN] Unexpected login error:',
       error
     );
+
+    await writeErrorAuditLog({
+      actorAlias: attemptedName,
+      action: 'LOGIN_FAILED',
+      description: 'Unexpected error during login.',
+      error,
+      context: { stage: 'unexpected' },
+    });
 
     return NextResponse.json(
       {

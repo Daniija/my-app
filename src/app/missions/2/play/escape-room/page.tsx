@@ -37,7 +37,8 @@ export default async function MissionTwoEscapeRoomPage() {
       alias,
       role,
       is_active,
-      onboarding_complete
+      onboarding_complete,
+      work_location_type
     `)
     .eq(
       'id',
@@ -74,6 +75,12 @@ export default async function MissionTwoEscapeRoomPage() {
     !profile.onboarding_complete
   ) {
     redirect('/onboarding');
+  }
+
+  if (
+    !profile.work_location_type
+  ) {
+    redirect('/select-workgroup');
   }
 
   // ==================================

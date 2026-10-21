@@ -9,6 +9,7 @@ type Attempt = { id: string; started_at: string; status: string; progress?: Reco
 type Props = { initialAttempt: Attempt };
 
 export default function Week1Game({ initialAttempt }: Props) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- saved progress is dynamic JSON persisted per attempt
   const saved = (initialAttempt.progress ?? {}) as any;
   const [stage, setStage] = useState<Stage>((saved.stage as Stage) || 'briefing');
   const [marks, setMarks] = useState<Record<string, Mark>>(saved.marks || {});
@@ -23,7 +24,9 @@ export default function Week1Game({ initialAttempt }: Props) {
   const [hints, setHints] = useState<number>(saved.hints || 0);
   const [saveState, setSaveState] = useState('Saved');
   const [error, setError] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- score result is dynamic JSON from the submit endpoint
   const [result, setResult] = useState<any>(initialAttempt.score ? { total_score: initialAttempt.score } : null);
+  // eslint-disable-next-line react-hooks/purity -- seed the live mission timer from the current time on first render
   const [now, setNow] = useState(Date.now());
 
   useEffect(()=>{ const t=setInterval(()=>setNow(Date.now()),1000); return ()=>clearInterval(t); },[]);

@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server';
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { writeErrorAuditLog } from '@/lib/audit';
 
 export async function POST(
   request: Request
 ) {
+  let authedUserId: string | null = null;
+
   try {
     const supabase =
       await createClient();
@@ -28,6 +31,8 @@ export async function POST(
         { status: 401 }
       );
     }
+
+    authedUserId = user.id;
 
     // ----------------------------------
     // VERIFY ADMIN PROFILE
@@ -234,6 +239,18 @@ export async function POST(
         updateError
       );
 
+      await writeErrorAuditLog({
+        actorId: profile.id,
+        actorAlias: profile.alias ?? profile.username,
+        actorRole: 'admin',
+        action: 'MISSION_SCHEDULE_CHANGE_FAILED',
+        targetType: 'mission',
+        targetId: String(missionId),
+        description: `Unable to update the schedule for mission ${missionId}.`,
+        error: updateError ?? new Error('Mission update returned no row.'),
+        context: { stage: 'update_mission' },
+      });
+
       return NextResponse.json(
         {
           error:
@@ -335,6 +352,16 @@ export async function POST(
       '[ADMIN SCHEDULE] Unexpected error:',
       error
     );
+
+    await writeErrorAuditLog({
+      actorId: authedUserId,
+      actorRole: authedUserId ? 'admin' : null,
+      action: 'MISSION_SCHEDULE_CHANGE_FAILED',
+      targetType: 'mission',
+      description: 'Unexpected error while updating a mission schedule.',
+      error,
+      context: { stage: 'unexpected' },
+    });
 
     return NextResponse.json(
       {

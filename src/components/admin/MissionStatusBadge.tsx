@@ -16,6 +16,7 @@ function getEffectiveStatus(
 ) {
   if (
     status === 'forced_open' ||
+    status === 'live' ||
     status === 'open'
   ) {
     return 'OPEN';

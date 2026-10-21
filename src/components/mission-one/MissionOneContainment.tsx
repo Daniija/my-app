@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -59,6 +60,7 @@ export default function MissionOneContainment({
   playerId,
   playerAlias,
   initialContainment,
+  previewMode = false,
 }: {
   playerId: string;
   playerAlias: string;
@@ -66,6 +68,7 @@ export default function MissionOneContainment({
     actions: string[];
     explanation: string;
   } | null;
+  previewMode?: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -103,48 +106,52 @@ export default function MissionOneContainment({
     setError('');
 
     try {
-      const { error: saveError } =
-        await supabase
-          .from('mission_containment')
-          .upsert(
-            {
-              player_id: playerId,
-              mission_id: 1,
-              actions: selected,
-              explanation:
-                explanation.trim(),
-              updated_at:
-                new Date().toISOString(),
-            },
-            {
-              onConflict:
-                'player_id,mission_id',
-            }
+      if (!previewMode) {
+        const { error: saveError } =
+          await supabase
+            .from('mission_containment')
+            .upsert(
+              {
+                player_id: playerId,
+                mission_id: 1,
+                actions: selected,
+                explanation:
+                  explanation.trim(),
+                updated_at:
+                  new Date().toISOString(),
+              },
+              {
+                onConflict:
+                  'player_id,mission_id',
+              }
+            );
+
+        if (saveError) {
+          throw new Error(
+            saveError.message
           );
+        }
 
-      if (saveError) {
-        throw new Error(
-          saveError.message
-        );
-      }
+        const { error: stageError } =
+          await supabase
+            .from('mission_attempts')
+            .update({
+              current_stage: 'report',
+            })
+            .eq('player_id', playerId)
+            .eq('mission_id', 1);
 
-      const { error: stageError } =
-        await supabase
-          .from('mission_attempts')
-          .update({
-            current_stage: 'report',
-          })
-          .eq('player_id', playerId)
-          .eq('mission_id', 1);
-
-      if (stageError) {
-        throw new Error(
-          stageError.message
-        );
+        if (stageError) {
+          throw new Error(
+            stageError.message
+          );
+        }
       }
 
       router.push(
-        '/missions/1/play/report'
+        previewMode
+          ? '/admin/missions/1/preview/report'
+          : '/missions/1/play/report'
       );
     } catch (err) {
       setError(
@@ -160,6 +167,28 @@ export default function MissionOneContainment({
   return (
     <main className="min-h-screen bg-[#02080d] px-4 py-8 text-white sm:px-6">
       <div className="mx-auto max-w-6xl">
+        {previewMode && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-600/60 bg-amber-950/20 px-5 py-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">
+                Admin Preview Mode
+              </p>
+
+              <p className="mt-1 text-sm text-slate-300">
+                No player attempt, containment response or score will be
+                saved.
+              </p>
+            </div>
+
+            <Link
+              href="/admin"
+              className="rounded-lg border border-amber-700 px-4 py-2 text-sm font-black text-amber-200 transition hover:bg-amber-950/40"
+            >
+              Exit Preview
+            </Link>
+          </div>
+        )}
+
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
@@ -173,7 +202,7 @@ export default function MissionOneContainment({
 
           <div className="text-right">
             <p className="text-xs uppercase text-slate-500">
-              Operative
+              {previewMode ? 'Administrator' : 'Operative'}
             </p>
 
             <p className="font-bold">
@@ -328,7 +357,9 @@ export default function MissionOneContainment({
             type="button"
             onClick={() =>
               router.push(
-                '/missions/1/play/theory'
+                previewMode
+                  ? '/admin/missions/1/preview/theory'
+                  : '/missions/1/play/theory'
               )
             }
             className="rounded-lg border border-slate-700 px-5 py-3 font-bold text-slate-300"

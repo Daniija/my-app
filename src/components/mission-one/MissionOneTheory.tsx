@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -131,10 +132,12 @@ export default function MissionOneTheory({
   playerId,
   playerAlias,
   initialTheory,
+  previewMode = false,
 }: {
   playerId: string;
   playerAlias: string;
   initialTheory: InitialTheory;
+  previewMode?: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -223,56 +226,60 @@ export default function MissionOneTheory({
     setError('');
 
     try {
-      const { error: theoryError } =
-        await supabase
-          .from('mission_theories')
-          .upsert(
-            {
-              player_id: playerId,
-              mission_id: 1,
-              attack_method: attackMethod,
-              initial_compromise:
-                initialCompromise,
-              strongest_evidence:
-                strongestEvidence,
+      if (!previewMode) {
+        const { error: theoryError } =
+          await supabase
+            .from('mission_theories')
+            .upsert(
+              {
+                player_id: playerId,
+                mission_id: 1,
+                attack_method: attackMethod,
+                initial_compromise:
+                  initialCompromise,
+                strongest_evidence:
+                  strongestEvidence,
 
-              // Existing text[] column reused.
-              // It now stores phishing-email clue IDs
-              // instead of attack-chain event IDs.
-              attack_sequence:
-                identifiedParts,
-              updated_at:
-                new Date().toISOString(),
-            },
-            {
-              onConflict:
-                'player_id,mission_id',
-            }
+                // Existing text[] column reused.
+                // It now stores phishing-email clue IDs
+                // instead of attack-chain event IDs.
+                attack_sequence:
+                  identifiedParts,
+                updated_at:
+                  new Date().toISOString(),
+              },
+              {
+                onConflict:
+                  'player_id,mission_id',
+              }
+            );
+
+        if (theoryError) {
+          throw new Error(
+            theoryError.message
           );
+        }
 
-      if (theoryError) {
-        throw new Error(
-          theoryError.message
-        );
-      }
+        const { error: stageError } =
+          await supabase
+            .from('mission_attempts')
+            .update({
+              current_stage: 'containment',
+            })
+            .eq('player_id', playerId)
+            .eq('mission_id', 1);
 
-      const { error: stageError } =
-        await supabase
-          .from('mission_attempts')
-          .update({
-            current_stage: 'containment',
-          })
-          .eq('player_id', playerId)
-          .eq('mission_id', 1);
-
-      if (stageError) {
-        throw new Error(
-          stageError.message
-        );
+        if (stageError) {
+          throw new Error(
+            stageError.message
+          );
+        }
       }
 
       router.push(
-        '/missions/1/play/containment'
+        previewMode
+          ? '/admin/missions/1/preview/containment'
+          : '/missions/1/play/containment'
       );
     } catch (err) {
       setError(
@@ -300,20 +307,43 @@ export default function MissionOneTheory({
               </h1>
             </div>
 
-            <div className="text-right">
-              <p className="text-xs uppercase text-slate-500">
-                Operative
-              </p>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-xs uppercase text-slate-500">
+                  {previewMode ? 'Administrator' : 'Operative'}
+                </p>
 
-              <p className="font-bold">
-                {playerAlias}
-              </p>
+                <p className="font-bold">
+                  {playerAlias}
+                </p>
+              </div>
+
+              {previewMode && (
+                <Link
+                  href="/admin"
+                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 hover:border-cyan-600"
+                >
+                  Exit Preview
+                </Link>
+              )}
             </div>
           </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        {previewMode && (
+          <div className="mb-6 rounded-xl border border-amber-600/60 bg-amber-950/20 px-5 py-4">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">
+              Admin Preview Mode
+            </p>
+
+            <p className="mt-1 text-sm text-slate-300">
+              No player attempt, theory or score will be saved.
+            </p>
+          </div>
+        )}
+
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-400">
           Investigation Stage 03
         </p>
@@ -700,7 +730,9 @@ export default function MissionOneTheory({
             type="button"
             onClick={() =>
               router.push(
-                '/missions/1/play/evidence'
+                previewMode
+                  ? '/admin/missions/1/preview/evidence'
+                  : '/missions/1/play/evidence'
               )
             }
             className="rounded-lg border border-slate-700 px-5 py-3 font-bold text-slate-300"

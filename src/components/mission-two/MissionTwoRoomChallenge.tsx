@@ -136,6 +136,7 @@ export default function MissionTwoRoomChallenge({
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- shuffle runs only after mount to avoid an SSR/client hydration mismatch
     setRandomizedOptions(shuffle(config.options ?? []));
 
     setRandomizedMatchChoices(shuffle(config.matchChoices ?? []));

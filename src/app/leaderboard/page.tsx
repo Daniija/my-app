@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
-import LeaderboardLive from '@/components/LeaderboardLive';
+import LeaderboardTabs from '@/components/LeaderboardTabs';
 import { requireUser } from '@/lib/auth';
+import { getCompletionTimes } from '@/lib/leaderboard';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
@@ -54,6 +55,7 @@ export default async function Leaderboard() {
   // LOAD FULL LEADERBOARD
   // ----------------------------------
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- leaderboard rows are returned untyped from Supabase
   let data: any[] = [];
 
   if (
@@ -113,6 +115,27 @@ export default async function Leaderboard() {
   }
 
   // ----------------------------------
+  // ATTACH TIME TAKEN
+  // ----------------------------------
+  // Derived live from mission_attempts
+  // timestamps — no new columns, so
+  // the database is left untouched.
+  // ----------------------------------
+
+  const completionTimes =
+    await getCompletionTimes(
+      admin,
+      playerIds
+    );
+
+  data = data.map((row) => ({
+    ...row,
+    total_time_seconds:
+      completionTimes.get(row.player_id)
+        ?.totalSeconds ?? 0,
+  }));
+
+  // ----------------------------------
   // PAGE
   // ----------------------------------
 
@@ -134,7 +157,7 @@ export default async function Leaderboard() {
       </header>
 
       <section className="mt-7">
-        <LeaderboardLive
+        <LeaderboardTabs
           initial={data}
         />
       </section>

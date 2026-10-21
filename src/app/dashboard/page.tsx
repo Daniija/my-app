@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server';
 
 import SignOutButton from '@/components/SignOutButton';
 
+import UpcomingMission from '@/components/UpcomingMission';
+
 
 export default async function DashboardPage() {
   const supabase =
@@ -44,7 +46,8 @@ export default async function DashboardPage() {
         department,
         role,
         is_active,
-        onboarding_complete
+        onboarding_complete,
+        work_location_type
       `)
       .eq(
         'id',
@@ -94,6 +97,19 @@ export default async function DashboardPage() {
   ) {
     redirect(
       '/onboarding'
+    );
+  }
+
+
+  // --------------------------------------------------
+  // WORKGROUP SELECTION
+  // --------------------------------------------------
+
+  if (
+    !profile.work_location_type
+  ) {
+    redirect(
+      '/select-workgroup'
     );
   }
 
@@ -389,6 +405,14 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap gap-2">
 
           <Link
+            href="/profile"
+            className="btn btn-secondary"
+          >
+            Profile
+          </Link>
+
+
+          <Link
             href="/leaderboard"
             className="btn btn-secondary"
           >
@@ -521,6 +545,25 @@ export default async function DashboardPage() {
         </div>
 
 
+        {(missions ?? []).length > 0 && (
+          <div className="mb-6">
+            <UpcomingMission
+              serverNow={now.toISOString()}
+              missions={(missions ?? []).map(
+                (mission) => ({
+                  id: mission.id,
+                  sequence: mission.sequence,
+                  title: mission.title,
+                  unlock_at: mission.unlock_at,
+                  status: mission.status,
+                  finale: mission.finale,
+                })
+              )}
+            />
+          </div>
+        )}
+
+
         <div className="grid gap-5 lg:grid-cols-2">
 
           {(
@@ -557,6 +600,8 @@ export default async function DashboardPage() {
               const forcedOpen =
                 mission.status ===
                   'forced_open' ||
+                mission.status ===
+                  'live' ||
                 mission.status ===
                   'open';
 
@@ -596,11 +641,25 @@ export default async function DashboardPage() {
                 'LOCKED';
 
 
+              // Admin release state always wins over a
+              // player's own unsubmitted attempt — otherwise
+              // a mission the admin just closed can still
+              // read as "IN PROGRESS" on the player dashboard.
               if (
                 complete
               ) {
                 statusText =
                   'COMPLETE';
+              } else if (
+                closed
+              ) {
+                statusText =
+                  'CLOSED';
+              } else if (
+                emergencyLocked
+              ) {
+                statusText =
+                  'EMERGENCY LOCKED';
               } else if (
                 active
               ) {
@@ -611,11 +670,6 @@ export default async function DashboardPage() {
               ) {
                 statusText =
                   'AVAILABLE';
-              } else if (
-                closed
-              ) {
-                statusText =
-                  'CLOSED';
               }
 
 
@@ -740,7 +794,9 @@ export default async function DashboardPage() {
 
 
                     {!available &&
-                      !complete && (
+                      !complete &&
+                      !closed &&
+                      !emergencyLocked && (
 
                         <div className="mt-5 rounded-xl border border-[var(--line)] bg-[#07141d] p-4">
 
@@ -787,6 +843,19 @@ export default async function DashboardPage() {
                         >
                           View Result
                         </Link>
+
+                      ) : closed ||
+                        emergencyLocked ? (
+
+                        <button
+                          type="button"
+                          disabled
+                          className="btn btn-secondary opacity-50"
+                        >
+                          {closed
+                            ? 'Mission Closed'
+                            : 'Emergency Locked'}
+                        </button>
 
                       ) : active ? (
 

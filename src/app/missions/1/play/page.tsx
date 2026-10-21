@@ -29,7 +29,8 @@ export default async function MissionOnePlayPage() {
         alias,
         role,
         is_active,
-        onboarding_complete
+        onboarding_complete,
+        work_location_type
       `)
       .eq('id', user.id)
       .single();
@@ -53,6 +54,10 @@ export default async function MissionOnePlayPage() {
 
   if (!profile.onboarding_complete) {
     redirect('/onboarding');
+  }
+
+  if (!profile.work_location_type) {
+    redirect('/select-workgroup');
   }
 
   // ----------------------------------

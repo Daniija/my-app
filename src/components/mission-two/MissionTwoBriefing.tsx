@@ -137,6 +137,7 @@ export default function MissionTwoBriefing({
     // ==================================
 
     if (previewMode) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- preview animation resets state before the scheduled timeout
       setStarting(true);
 
       setError('');
@@ -216,6 +217,7 @@ export default function MissionTwoBriefing({
 
         const contentType = response.headers.get('content-type');
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed JSON/text response of unknown shape
         let body: any = null;
 
         if (contentType?.includes('application/json')) {
@@ -299,6 +301,7 @@ export default function MissionTwoBriefing({
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the countdown when a new attempt timer starts
     setSecondsRemaining(MISSION_DURATION_SECONDS);
 
     const interval = window.setInterval(() => {

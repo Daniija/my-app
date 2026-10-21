@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { writeErrorAuditLog } from '@/lib/audit';
 
 export async function POST() {
+  let authedUserId: string | null = null;
+
   try {
     const supabase = await createClient();
 
@@ -19,6 +22,8 @@ export async function POST() {
         { status: 401 }
       );
     }
+
+    authedUserId = user.id;
 
     const { data: profile } =
       await supabase
@@ -452,6 +457,18 @@ export async function POST() {
         reportError
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorAlias: profile?.alias,
+        actorRole: 'player',
+        action: 'MISSION_COMPLETE_FAILED',
+        targetType: 'mission',
+        targetId: '1',
+        description: 'Unable to save the Mission 01 breach report.',
+        error: reportError,
+        context: { stage: 'save_report', totalScore },
+      });
+
       return NextResponse.json(
         {
           message:
@@ -483,6 +500,18 @@ export async function POST() {
         '[MISSION 01] Attempt completion failed:',
         attemptError
       );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorAlias: profile?.alias,
+        actorRole: 'player',
+        action: 'MISSION_COMPLETE_FAILED',
+        targetType: 'mission',
+        targetId: '1',
+        description: 'Mission 01 report was saved, but the attempt could not be marked complete.',
+        error: attemptError,
+        context: { stage: 'complete_attempt', totalScore },
+      });
 
       return NextResponse.json(
         {
@@ -544,6 +573,17 @@ export async function POST() {
       '[MISSION 01 COMPLETE]',
       error
     );
+
+    await writeErrorAuditLog({
+      actorId: authedUserId,
+      actorRole: authedUserId ? 'player' : null,
+      action: 'MISSION_COMPLETE_FAILED',
+      targetType: 'mission',
+      targetId: '1',
+      description: 'Unexpected error while completing Mission 01.',
+      error,
+      context: { stage: 'unexpected' },
+    });
 
     return NextResponse.json(
       {

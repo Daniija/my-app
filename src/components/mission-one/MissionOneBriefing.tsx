@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import {
   useEffect,
   useRef,
@@ -17,23 +19,28 @@ type Attempt = {
 };
 
 function getMissionStagePath(
-  stage: string | null | undefined
+  stage: string | null | undefined,
+  previewMode = false
 ) {
+  const base = previewMode
+    ? '/admin/missions/1/preview'
+    : '/missions/1/play';
+
   switch (stage) {
     case 'incident':
-      return '/missions/1/play/incident';
+      return `${base}/incident`;
 
     case 'evidence':
-      return '/missions/1/play/evidence';
+      return `${base}/evidence`;
 
     case 'theory':
-      return '/missions/1/play/theory';
+      return `${base}/theory`;
 
     case 'containment':
-      return '/missions/1/play/containment';
+      return `${base}/containment`;
 
     case 'report':
-      return '/missions/1/play/report';
+      return `${base}/report`;
 
     case 'briefing':
     default:
@@ -44,9 +51,11 @@ function getMissionStagePath(
 export default function MissionOneBriefing({
   initialAttempt,
   playerAlias,
+  previewMode = false,
 }: {
   initialAttempt: Attempt | null;
   playerAlias: string;
+  previewMode?: boolean;
 }) {
   const router = useRouter();
 
@@ -75,6 +84,42 @@ export default function MissionOneBriefing({
   // ---------------------------------------
 
   useEffect(() => {
+    // ==================================
+    // ADMIN PREVIEW MODE
+    //
+    // Do NOT:
+    // - call /api/missions/1/start
+    // - create mission_attempts
+    // - require Mission 01 to be open
+    //
+    // We still show the secure-channel
+    // animation so the admin sees the
+    // same experience as a player.
+    // ==================================
+
+    if (previewMode) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- preview animation resets state before the scheduled timeout
+      setStarting(true);
+      setError('');
+
+      const timer = window.setTimeout(() => {
+        const previewAttempt: Attempt = {
+          id: 'admin-preview',
+          status: 'active',
+          current_stage: 'briefing',
+          started_at: new Date().toISOString(),
+          completed_at: null,
+        };
+
+        setAttempt(previewAttempt);
+        setStarting(false);
+      }, 1200);
+
+      return () => {
+        window.clearTimeout(timer);
+      };
+    }
+
     if (initialAttempt) {
       setAttempt(initialAttempt);
       setStarting(false);
@@ -123,6 +168,7 @@ export default function MissionOneBriefing({
             'content-type'
           );
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed JSON/text response of unknown shape
         let body: any = null;
 
         if (
@@ -205,6 +251,7 @@ export default function MissionOneBriefing({
     void startMission();
   }, [
     initialAttempt,
+    previewMode,
     router,
   ]);
 
@@ -222,6 +269,7 @@ export default function MissionOneBriefing({
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the countdown when a new attempt timer starts
     setSecondsLeft(10);
 
     const interval =
@@ -273,6 +321,14 @@ export default function MissionOneBriefing({
       return;
     }
 
+    if (previewMode) {
+      router.push(
+        '/admin/missions/1/preview/incident'
+      );
+
+      return;
+    }
+
     router.push(
       '/missions/1/play/incident'
     );
@@ -296,6 +352,30 @@ export default function MissionOneBriefing({
     return (
       <main className="min-h-screen bg-[#02080d] px-4 py-10 text-white">
         <div className="mx-auto max-w-5xl">
+          {previewMode && (
+            <div className="mb-5 rounded-xl border border-amber-600/50 bg-amber-950/20 px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">
+                    Admin Preview
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    Mission status, player progress and scores will not be
+                    changed.
+                  </p>
+                </div>
+
+                <Link
+                  href="/admin"
+                  className="rounded-lg border border-amber-700 px-4 py-2 text-sm font-bold text-amber-200 hover:bg-amber-950/40"
+                >
+                  Exit Preview
+                </Link>
+              </div>
+            </div>
+          )}
+
           <section className="rounded-2xl border border-cyan-900 bg-[#07141d] p-10 text-center">
             <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-400">
               Cyber Defence Unit
@@ -310,6 +390,12 @@ export default function MissionOneBriefing({
               Preparing Mission
               01...
             </p>
+
+            {previewMode && (
+              <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-amber-300">
+                Preview Session
+              </p>
+            )}
           </section>
         </div>
       </main>
@@ -365,6 +451,30 @@ export default function MissionOneBriefing({
   return (
     <main className="min-h-screen bg-[#02080d] px-4 py-8 text-white sm:px-6">
       <div className="mx-auto max-w-6xl">
+        {previewMode && (
+          <div className="mb-5 rounded-xl border border-amber-600/60 bg-amber-950/20 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">
+                  Admin Preview Mode
+                </p>
+
+                <p className="mt-1 text-sm text-slate-300">
+                  You are viewing Mission 01 without releasing it to players.
+                  Progress, attempts and scores will not be saved.
+                </p>
+              </div>
+
+              <Link
+                href="/admin"
+                className="rounded-lg border border-amber-700 px-4 py-2 text-sm font-black text-amber-200 transition hover:bg-amber-950/40"
+              >
+                Exit Preview
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* TOP BAR */}
         <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-cyan-950 bg-[#07141d] px-5 py-4">
           <div>
@@ -380,7 +490,7 @@ export default function MissionOneBriefing({
 
           <div className="text-right">
             <p className="text-xs uppercase tracking-widest text-slate-500">
-              Operative
+              {previewMode ? 'Administrator' : 'Operative'}
             </p>
 
             <p className="font-bold">
@@ -621,6 +731,12 @@ export default function MissionOneBriefing({
                         : 'seconds'}
                     </p>
                   </>
+                )}
+
+                {previewMode && (
+                  <p className="mt-1 text-xs font-bold text-amber-400">
+                    Preview progress will not affect the live mission.
+                  </p>
                 )}
               </div>
 

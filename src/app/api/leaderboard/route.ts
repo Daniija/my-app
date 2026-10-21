@@ -10,10 +10,20 @@ import {
   createAdminClient,
 } from '@/lib/supabase/admin';
 
+import {
+  getCompletionTimes,
+} from '@/lib/leaderboard';
+
+import {
+  writeErrorAuditLog,
+} from '@/lib/audit';
+
 export const dynamic =
   'force-dynamic';
 
 export async function GET() {
+  let authedUserId: string | null = null;
+
   try {
     const supabase =
       await createClient();
@@ -34,6 +44,8 @@ export async function GET() {
         }
       );
     }
+
+    authedUserId = user.id;
 
     const admin =
       createAdminClient();
@@ -58,6 +70,15 @@ export async function GET() {
         '[LEADERBOARD API] Player lookup failed:',
         profileError
       );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'LEADERBOARD_LOAD_FAILED',
+        description: 'Unable to load players for the leaderboard.',
+        error: profileError,
+        context: { stage: 'load_players' },
+      });
 
       return NextResponse.json(
         {
@@ -145,6 +166,15 @@ export async function GET() {
         error
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'LEADERBOARD_LOAD_FAILED',
+        description: 'Unable to load the leaderboard entries.',
+        error,
+        context: { stage: 'load_entries' },
+      });
+
       return NextResponse.json(
         {
           error:
@@ -156,10 +186,26 @@ export async function GET() {
       );
     }
 
+    const completionTimes =
+      await getCompletionTimes(
+        admin,
+        playerIds
+      );
+
+    const rows =
+      (data ?? []).map(
+        (row) => ({
+          ...row,
+          total_time_seconds:
+            completionTimes.get(
+              row.player_id
+            )?.totalSeconds ?? 0,
+        })
+      );
+
     return NextResponse.json(
       {
-        rows:
-          data ?? [],
+        rows,
       },
       {
         headers: {
@@ -173,6 +219,15 @@ export async function GET() {
       '[LEADERBOARD API]',
       error
     );
+
+    await writeErrorAuditLog({
+      actorId: authedUserId,
+      actorRole: authedUserId ? 'player' : null,
+      action: 'LEADERBOARD_LOAD_FAILED',
+      description: 'Unexpected error loading the leaderboard.',
+      error,
+      context: { stage: 'unexpected' },
+    });
 
     return NextResponse.json(
       {

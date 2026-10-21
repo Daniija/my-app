@@ -104,6 +104,13 @@ export default async function AdminPage() {
           >
             Password Resets
           </Link>
+
+          <Link
+            className="btn btn-secondary"
+            href="/admin/org-options"
+          >
+            Departments &amp; Branches
+          </Link>
         </div>
       </div>
 
@@ -235,28 +242,27 @@ export default async function AdminPage() {
                 />
               </div>
 
-              {/* ADMIN PREVIEW - MISSION 02 ONLY */}
-              {m.id === 2 && (
-                <div className="mt-5 border-t border-[var(--line)] pt-5">
-                  <p className="mb-2 text-xs font-bold tracking-[0.14em] text-amber-300">
-                    ADMIN TESTING
-                  </p>
+              {/* ADMIN PREVIEW - ALL MISSIONS */}
+              <div className="mt-5 border-t border-[var(--line)] pt-5">
+                <p className="mb-2 text-xs font-bold tracking-[0.14em] text-amber-300">
+                  ADMIN TESTING
+                </p>
 
-                  <Link
-                    href="/admin/missions/2/preview"
-                    className="btn btn-secondary"
-                  >
-                    Preview Mission 02
-                  </Link>
+                <Link
+                  href={`/admin/missions/${m.id}/preview`}
+                  className="btn btn-secondary"
+                >
+                  Preview Mission{' '}
+                  {String(m.sequence).padStart(2, '0')}
+                </Link>
 
-                  <p className="muted mt-2 text-xs">
-                    Preview Mission 02 without changing
-                    its release status or affecting
-                    player progress, scores, or the
-                    leaderboard.
-                  </p>
-                </div>
-              )}
+                <p className="muted mt-2 text-xs">
+                  Preview Mission{' '}
+                  {String(m.sequence).padStart(2, '0')} without
+                  changing its release status or affecting
+                  player progress, scores, or the leaderboard.
+                </p>
+              </div>
             </article>
           ))}
         </div>
@@ -286,6 +292,7 @@ export default async function AdminPage() {
         <div className="mt-4 space-y-2">
           {recentScores?.length ? (
             recentScores.map(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- score row is returned untyped from Supabase
               (row: any) => (
                 <div
                   key={`${row.mission_id}-${row.created_at}-${row.total_score}`}

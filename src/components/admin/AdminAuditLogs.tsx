@@ -100,6 +100,7 @@ export default function AdminAuditLog({
     const normalizedSearch =
       search.trim().toLowerCase();
 
+    // eslint-disable-next-line react-hooks/purity -- the time filter needs the current time on each recompute
     const now = Date.now();
 
     return logs.filter((log) => {

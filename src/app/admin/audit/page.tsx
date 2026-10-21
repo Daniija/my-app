@@ -93,6 +93,7 @@ export default async function AdminAuditPage() {
   const last24Hours =
     auditRows.filter(
       (log) =>
+        // eslint-disable-next-line react-hooks/purity -- request-time "last 24 hours" window on a dynamic server page
         Date.now() -
           new Date(
             log.created_at

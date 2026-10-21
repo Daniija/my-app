@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import LoginForm from '@/components/LoginForm';
+import UpcomingMission from '@/components/UpcomingMission';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export default async function LoginPage() {
   const supabase = await createClient();
@@ -9,6 +11,34 @@ export default async function LoginPage() {
   } = await supabase.auth.getUser();
 
   if (user) redirect('/dashboard');
+
+  // The login page is public, and the "missions" table can only be read
+  // by authenticated players (see supabase/migrations/001_initial.sql).
+  // The admin client bypasses RLS so logged-out visitors can still see
+  // which mission is live and when the next one unlocks.
+  const now = new Date();
+
+  const admin = createAdminClient();
+
+  const { data: missions, error: missionError } = await admin
+    .from('missions')
+    .select(`
+      id,
+      title,
+      slug,
+      sequence,
+      unlock_at,
+      status,
+      finale
+    `)
+    .order('sequence', { ascending: true });
+
+  if (missionError) {
+    console.error(
+      '[LOGIN] Unable to load missions:',
+      missionError
+    );
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-12">
@@ -21,10 +51,22 @@ export default async function LoginPage() {
             Four Fridays. One connected cyber incident. Investigate evidence, survive social engineering,
             contain the final attack, and compete on a month-long live leaderboard.
           </p>
-          <div className="card mt-6 p-4">
-            <p className="font-bold">MISSION 01 — THE BREACH</p>
-            <p className="muted mt-1 text-sm">Friday, October 9 · 9:00 AM Jamaica time</p>
-          </div>
+
+          {(missions ?? []).length > 0 && (
+            <div className="mt-6">
+              <UpcomingMission
+                serverNow={now.toISOString()}
+                missions={(missions ?? []).map((mission) => ({
+                  id: mission.id,
+                  sequence: mission.sequence,
+                  title: mission.title,
+                  unlock_at: mission.unlock_at,
+                  status: mission.status,
+                  finale: mission.finale,
+                }))}
+              />
+            </div>
+          )}
         </section>
 
         <LoginForm />

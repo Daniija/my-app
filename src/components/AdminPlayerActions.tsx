@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 type Action =
@@ -8,123 +8,276 @@ type Action =
   | 'deactivate'
   | 'make_admin'
   | 'make_player'
-  | 'delete';
+  | 'delete'
+  | 'reset_password';
+
+type ConfirmRequest = {
+  action: Action;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  danger?: boolean;
+};
+
+type PasswordResult = {
+  alias: string;
+  username: string;
+  temporaryPassword: string;
+};
+
+function Overlay({
+  onDismiss,
+  children,
+}: {
+  onDismiss: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onDismiss();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onDismiss]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onDismiss();
+      }}
+    >
+      <div className="card w-full max-w-md p-6 shadow-xl">{children}</div>
+    </div>
+  );
+}
 
 export default function AdminPlayerActions({
   playerId,
   active,
   role,
+  alias,
+  username,
 }: {
   playerId: string;
   active: boolean;
   role: string;
+  alias?: string | null;
+  username?: string | null;
 }) {
-  const [busyAction, setBusyAction] =
-    useState<Action | null>(null);
+  const [busyAction, setBusyAction] = useState<Action | null>(null);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(
+    null
+  );
+  const [passwordResult, setPasswordResult] =
+    useState<PasswordResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const router = useRouter();
 
-  async function run(action: Action) {
-    const labels: Record<Action, string> = {
-      activate: 'activate this account',
-      deactivate: 'deactivate this account',
-      make_admin: 'promote this player to admin',
-      make_player: 'remove admin privileges from this account',
-      delete: 'permanently delete this player and their mission data',
-    };
+  const playerName = alias || username || 'this player';
+  const busy = busyAction !== null;
 
-    const warning =
-      action === 'delete'
-        ? '\n\nThis cannot be undone.'
-        : '';
+  // ==================================
+  // RESET PASSWORD
+  // ==================================
 
-    if (
-      !confirm(
-        `Are you sure you want to ${labels[action]}?${warning}`
-      )
-    ) {
-      return;
-    }
-
-    setBusyAction(action);
+  async function performResetPassword() {
+    setBusyAction('reset_password');
 
     try {
-      const response = await fetch(
-        '/api/admin/players',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            playerId,
-            action,
-          }),
-        }
-      );
+      const response = await fetch('/api/admin/passwords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_one', playerId }),
+      });
 
-      const data = await response
-        .json()
-        .catch(() => ({}));
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
           data.error ||
             data.message ||
-            `Request failed (${response.status}).`
+            `Password reset failed (${response.status}).`
         );
       }
 
+      setPasswordResult({
+        alias: data.alias || playerName,
+        username: data.username || username || '—',
+        temporaryPassword: data.temporaryPassword,
+      });
+
       router.refresh();
     } catch (error) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'Unable to update player.'
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to reset password.'
       );
     } finally {
       setBusyAction(null);
     }
   }
 
-  const busy = busyAction !== null;
+  // ==================================
+  // ACTIVATE / DEACTIVATE / ROLE / DELETE
+  // ==================================
+
+  async function performAction(action: Exclude<Action, 'reset_password'>) {
+    setBusyAction(action);
+
+    try {
+      const response = await fetch('/api/admin/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId, action }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || data.message || `Request failed (${response.status}).`
+        );
+      }
+
+      router.refresh();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to update player.'
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  // ==================================
+  // DIALOG TRIGGERS
+  // ==================================
+
+  function requestResetPassword() {
+    if (role !== 'player') {
+      setErrorMessage(
+        'Administrator passwords cannot be reset from this screen.'
+      );
+      return;
+    }
+
+    setConfirmRequest({
+      action: 'reset_password',
+      title: 'Reset password?',
+      description: `Reset the password for ${playerName}? Their current password will stop working immediately, and they will be given a new temporary one.`,
+      confirmLabel: 'Reset password',
+    });
+  }
+
+  function requestAction(
+    action: Exclude<Action, 'reset_password'>,
+    title: string,
+    description: string,
+    confirmLabel: string,
+    danger?: boolean
+  ) {
+    setConfirmRequest({ action, title, description, confirmLabel, danger });
+  }
+
+  function handleConfirm() {
+    if (!confirmRequest) return;
+
+    const { action } = confirmRequest;
+    setConfirmRequest(null);
+
+    if (action === 'reset_password') {
+      performResetPassword();
+    } else {
+      performAction(action);
+    }
+  }
+
+  async function copyPassword() {
+    if (!passwordResult) return;
+
+    try {
+      await navigator.clipboard.writeText(passwordResult.temporaryPassword);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can fail (e.g. insecure context); the
+      // password is still visible on screen to copy manually.
+    }
+  }
 
   return (
     <div className="flex flex-wrap gap-2">
+      {/* RESET PASSWORD */}
+
+      {role === 'player' && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={requestResetPassword}
+          className="btn btn-secondary"
+        >
+          {busyAction === 'reset_password'
+            ? 'Resetting...'
+            : 'Reset Password'}
+        </button>
+      )}
+
+      {/* ACTIVATE / DEACTIVATE */}
+
       {active ? (
         <button
           className="btn btn-danger"
           disabled={busy}
           type="button"
-          onClick={() => run('deactivate')}
+          onClick={() =>
+            requestAction(
+              'deactivate',
+              'Deactivate this account?',
+              `${playerName} will be immediately signed out and blocked from signing in again until reactivated.`,
+              'Deactivate',
+              true
+            )
+          }
         >
-          {busyAction === 'deactivate'
-            ? 'Deactivating...'
-            : 'Deactivate'}
+          {busyAction === 'deactivate' ? 'Deactivating...' : 'Deactivate'}
         </button>
       ) : (
         <button
           className="btn btn-secondary"
           disabled={busy}
           type="button"
-          onClick={() => run('activate')}
+          onClick={() =>
+            requestAction(
+              'activate',
+              'Activate this account?',
+              `${playerName} will be able to sign in again.`,
+              'Activate'
+            )
+          }
         >
-          {busyAction === 'activate'
-            ? 'Activating...'
-            : 'Activate'}
+          {busyAction === 'activate' ? 'Activating...' : 'Activate'}
         </button>
       )}
+
+      {/* ROLE MANAGEMENT */}
 
       {role === 'admin' ? (
         <button
           className="btn btn-secondary"
           disabled={busy}
           type="button"
-          onClick={() => run('make_player')}
+          onClick={() =>
+            requestAction(
+              'make_player',
+              'Remove admin privileges?',
+              `${playerName} will be downgraded to a regular player account.`,
+              'Make player'
+            )
+          }
         >
-          {busyAction === 'make_player'
-            ? 'Updating...'
-            : 'Make player'}
+          {busyAction === 'make_player' ? 'Updating...' : 'Make player'}
         </button>
       ) : (
         <>
@@ -132,24 +285,151 @@ export default function AdminPlayerActions({
             className="btn btn-secondary"
             disabled={busy}
             type="button"
-            onClick={() => run('make_admin')}
+            onClick={() =>
+              requestAction(
+                'make_admin',
+                'Promote to admin?',
+                `${playerName} will be granted full administrator access to this contest.`,
+                'Make admin'
+              )
+            }
           >
-            {busyAction === 'make_admin'
-              ? 'Updating...'
-              : 'Make admin'}
+            {busyAction === 'make_admin' ? 'Updating...' : 'Make admin'}
           </button>
 
           <button
             className="btn btn-danger"
             disabled={busy}
             type="button"
-            onClick={() => run('delete')}
+            onClick={() =>
+              requestAction(
+                'delete',
+                'Delete this player?',
+                `This permanently removes ${playerName} and all of their mission data. This cannot be undone.`,
+                'Delete player',
+                true
+              )
+            }
           >
-            {busyAction === 'delete'
-              ? 'Deleting...'
-              : 'Delete Player'}
+            {busyAction === 'delete' ? 'Deleting...' : 'Delete Player'}
           </button>
         </>
+      )}
+
+      {/* CONFIRMATION DIALOG */}
+
+      {confirmRequest && (
+        <Overlay onDismiss={() => setConfirmRequest(null)}>
+          <h2 className="text-lg font-black">{confirmRequest.title}</h2>
+
+          <p className="muted mt-3 text-sm">{confirmRequest.description}</p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              autoFocus
+              onClick={() => setConfirmRequest(null)}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              className={`btn ${
+                confirmRequest.danger ? 'btn-danger' : 'btn-primary'
+              }`}
+              onClick={handleConfirm}
+            >
+              {confirmRequest.confirmLabel}
+            </button>
+          </div>
+        </Overlay>
+      )}
+
+      {/* PASSWORD RESET RESULT */}
+
+      {passwordResult && (
+        <Overlay
+          onDismiss={() => {
+            setPasswordResult(null);
+            setCopied(false);
+          }}
+        >
+          <h2 className="text-lg font-black">Password reset successful</h2>
+
+          <dl className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="muted">Player</dt>
+              <dd className="font-bold">{passwordResult.alias}</dd>
+            </div>
+
+            <div className="flex justify-between gap-3">
+              <dt className="muted">Username</dt>
+              <dd className="font-bold">{passwordResult.username}</dd>
+            </div>
+          </dl>
+
+          <div className="mt-4">
+            <p className="muted text-xs font-bold uppercase">
+              Temporary password
+            </p>
+
+            <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[#07141d] p-3">
+              <code className="select-all text-base font-bold tracking-wide">
+                {passwordResult.temporaryPassword}
+              </code>
+
+              <button
+                type="button"
+                className="btn btn-secondary shrink-0"
+                onClick={copyPassword}
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+
+          <p className="muted mt-4 text-xs">
+            Give this password only to the player. They will be required to
+            create a new password after signing in.
+          </p>
+
+          <div className="mt-6 flex justify-end">
+            <button
+              type="button"
+              className="btn btn-primary"
+              autoFocus
+              onClick={() => {
+                setPasswordResult(null);
+                setCopied(false);
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </Overlay>
+      )}
+
+      {/* ERROR DIALOG */}
+
+      {errorMessage && (
+        <Overlay onDismiss={() => setErrorMessage(null)}>
+          <h2 className="text-lg font-black">Something went wrong</h2>
+
+          <p className="muted mt-3 text-sm">{errorMessage}</p>
+
+          <div className="mt-6 flex justify-end">
+            <button
+              type="button"
+              className="btn btn-primary"
+              autoFocus
+              onClick={() => setErrorMessage(null)}
+            >
+              Close
+            </button>
+          </div>
+        </Overlay>
       )}
     </div>
   );

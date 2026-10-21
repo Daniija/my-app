@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 
-import { createClient } from '@/lib/supabase/server';
+import { requireAdminApi } from '@/lib/admin';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { writeErrorAuditLog } from '@/lib/audit';
 
 type PlayerAction =
   | 'activate'
@@ -19,47 +20,20 @@ const allowedActions: PlayerAction[] = [
 ];
 
 export async function POST(request: Request) {
+  // Tracked outside the try block so the catch-all handler below can still
+  // attach context even if something throws before these are in scope.
+  let actorId: string | null = null;
+  let actorAlias: string | null = null;
+  let attemptedPlayerId: string | null = null;
+  let attemptedAction: string | null = null;
+
   try {
-    const supabase = await createClient();
+    const guard = await requireAdminApi();
+    if (!guard.ok) return guard.response;
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required.' },
-        { status: 401 }
-      );
-    }
-
-    const {
-      data: adminProfile,
-      error: adminProfileError,
-    } = await supabase
-      .from('profiles')
-      .select(`
-        id,
-        username,
-        alias,
-        role,
-        is_active
-      `)
-      .eq('id', user.id)
-      .single();
-
-    if (
-      adminProfileError ||
-      !adminProfile ||
-      adminProfile.role !== 'admin' ||
-      !adminProfile.is_active
-    ) {
-      return NextResponse.json(
-        { error: 'Administrator access required.' },
-        { status: 403 }
-      );
-    }
+    const { user, profile: adminProfile } = guard;
+    actorId = adminProfile.id;
+    actorAlias = adminProfile.alias ?? adminProfile.username;
 
     const body = await request
       .json()
@@ -70,8 +44,12 @@ export async function POST(request: Request) {
         ? body.playerId
         : '';
 
+    attemptedPlayerId = playerId || null;
+
     const action =
       body?.action as PlayerAction | undefined;
+
+    attemptedAction = action ?? null;
 
     if (
       !playerId ||
@@ -148,6 +126,18 @@ export async function POST(request: Request) {
           '[ADMIN PLAYERS] Auth delete failed:',
           authDeleteError
         );
+
+        await writeErrorAuditLog({
+          actorId: adminProfile.id,
+          actorAlias: adminProfile.alias ?? adminProfile.username,
+          actorRole: 'admin',
+          action: 'PLAYER_ACTION_FAILED',
+          targetType: 'player',
+          targetId: playerId,
+          description: `Unable to delete player account ${target.alias ?? target.username ?? playerId}.`,
+          error: authDeleteError,
+          context: { stage: 'delete_auth_user', action },
+        });
 
         return NextResponse.json(
           {
@@ -248,6 +238,18 @@ export async function POST(request: Request) {
           updateError
         );
 
+        await writeErrorAuditLog({
+          actorId: adminProfile.id,
+          actorAlias: adminProfile.alias ?? adminProfile.username,
+          actorRole: 'admin',
+          action: 'PLAYER_ACTION_FAILED',
+          targetType: 'player',
+          targetId: playerId,
+          description: `Unable to ${action} player ${target.alias ?? target.username ?? playerId}.`,
+          error: updateError,
+          context: { stage: 'update_status', action },
+        });
+
         return NextResponse.json(
           {
             error:
@@ -285,6 +287,18 @@ export async function POST(request: Request) {
         '[ADMIN PLAYERS] Role update failed:',
         roleError
       );
+
+      await writeErrorAuditLog({
+        actorId: adminProfile.id,
+        actorAlias: adminProfile.alias ?? adminProfile.username,
+        actorRole: 'admin',
+        action: 'PLAYER_ACTION_FAILED',
+        targetType: 'player',
+        targetId: playerId,
+        description: `Unable to ${action} player ${target.alias ?? target.username ?? playerId}.`,
+        error: roleError,
+        context: { stage: 'update_role', action, newRole },
+      });
 
       return NextResponse.json(
         {
@@ -356,6 +370,18 @@ export async function POST(request: Request) {
       '[ADMIN PLAYERS] Unexpected error:',
       error
     );
+
+    await writeErrorAuditLog({
+      actorId,
+      actorAlias,
+      actorRole: actorId ? 'admin' : null,
+      action: 'PLAYER_ACTION_FAILED',
+      targetType: 'player',
+      targetId: attemptedPlayerId,
+      description: 'Unexpected error during player management.',
+      error,
+      context: { stage: 'unexpected', attemptedAction },
+    });
 
     return NextResponse.json(
       {

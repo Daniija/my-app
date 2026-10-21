@@ -10,7 +10,6 @@ export default function ProfileSetup({
   username: string;
 }) {
   const [alias, setAlias] = useState('');
-  const [department, setDepartment] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -33,7 +32,6 @@ export default function ProfileSetup({
 
       const { error } = await supabase.rpc('complete_agent_profile', {
         p_alias: clean,
-        p_department: department.trim() || null,
       });
 
       if (error) {
@@ -92,23 +90,6 @@ export default function ProfileSetup({
             onChange={(e) => setAlias(e.target.value)}
             className="w-full rounded-xl border border-[var(--line)] bg-[#07141d] p-3"
             placeholder="Agent Cipher"
-          />
-        </div>
-
-        <div>
-          <label
-            className="block text-sm font-bold mb-2"
-            htmlFor="department"
-          >
-            Department (optional)
-          </label>
-
-          <input
-            id="department"
-            maxLength={60}
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-            className="w-full rounded-xl border border-[var(--line)] bg-[#07141d] p-3"
           />
         </div>
 

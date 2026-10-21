@@ -7,7 +7,7 @@ export default async function OnboardingPage() {
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('username,onboarding_complete')
+    .select('username,onboarding_complete,work_location_type')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -39,7 +39,11 @@ export default async function OnboardingPage() {
     );
   }
 
-  if (profile.onboarding_complete) redirect('/dashboard');
+  if (profile.onboarding_complete) {
+    redirect(
+      profile.work_location_type ? '/dashboard' : '/select-workgroup'
+    );
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">

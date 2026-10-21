@@ -80,6 +80,7 @@ export default async function PasswordResetsPage() {
         <PasswordResetAdminList
           initialRequests={
             (requests ??
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- casting untyped Supabase rows to the component prop type
               []) as any
           }
         />

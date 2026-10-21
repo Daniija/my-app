@@ -9,6 +9,10 @@ import {
   getMissionTwoPreviewFragment,
 } from '@/lib/missions/mission-two-fragments';
 
+import {
+  writeErrorAuditLog,
+} from '@/lib/audit';
+
 
 const CORRECT_IDS =
   new Set([
@@ -53,6 +57,8 @@ function isExactAnswer(
 export async function POST(
   request: Request
 ) {
+  let authedUserId: string | null = null;
+
   try {
     const supabase =
       await createClient();
@@ -80,6 +86,8 @@ export async function POST(
         }
       );
     }
+
+    authedUserId = user.id;
 
 
     // ----------------------------------
@@ -126,7 +134,8 @@ export async function POST(
           id,
           role,
           is_active,
-          onboarding_complete
+          onboarding_complete,
+          work_location_type
         `)
         .eq(
           'id',
@@ -143,6 +152,26 @@ export async function POST(
         {
           message:
             'Unable to verify your account.',
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+
+    // ----------------------------------
+    // WORKGROUP CHECK
+    // ----------------------------------
+
+    if (
+      !previewMode &&
+      !profile.work_location_type
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            'Choose your department or branch before playing Mission 02.',
         },
         {
           status: 403,
@@ -315,6 +344,17 @@ export async function POST(
         attemptError
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_SUBMIT_FAILED',
+        targetType: 'mission',
+        targetId: '2',
+        description: 'Mission 02 attempt could not be loaded while submitting room 1.',
+        error: attemptError ?? new Error('Attempt not found.'),
+        context: { stage: 'load_attempt', roomNumber: 1 },
+      });
+
       return NextResponse.json(
         {
           message:
@@ -445,6 +485,17 @@ export async function POST(
         updateError
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_SUBMIT_FAILED',
+        targetType: 'mission',
+        targetId: '2',
+        description: 'Room 1 answer was correct, but progress could not be saved.',
+        error: updateError ?? new Error('Stage update returned no row.'),
+        context: { stage: 'advance_stage', roomNumber: 1 },
+      });
+
       return NextResponse.json(
         {
           message:
@@ -470,6 +521,17 @@ export async function POST(
         '[MISSION 02 ROOM 01] Stage verification failed:',
         updatedAttempt
       );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_SUBMIT_FAILED',
+        targetType: 'mission',
+        targetId: '2',
+        description: 'Room 1 was solved, but room 2 could not be unlocked.',
+        error: new Error(`Stage verification failed: current_stage is "${updatedAttempt.current_stage}".`),
+        context: { stage: 'verify_stage', roomNumber: 1 },
+      });
 
       return NextResponse.json(
         {
@@ -525,6 +587,17 @@ export async function POST(
       '[MISSION 02 ROOM 01] Submit failed:',
       error
     );
+
+    await writeErrorAuditLog({
+      actorId: authedUserId,
+      actorRole: authedUserId ? 'player' : null,
+      action: 'MISSION_SUBMIT_FAILED',
+      targetType: 'mission',
+      targetId: '2',
+      description: 'Unexpected error submitting room 1.',
+      error,
+      context: { stage: 'unexpected', roomNumber: 1 },
+    });
 
     return NextResponse.json(
       {

@@ -3,10 +3,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { validatePassword } from '@/lib/auth/username';
+import { writeErrorAuditLog } from '@/lib/audit';
 
 export async function POST(
   request: Request
 ) {
+  let authedUserId: string | null = null;
+
   try {
     const supabase =
       await createClient();
@@ -27,6 +30,8 @@ export async function POST(
         }
       );
     }
+
+    authedUserId = user.id;
 
     const body =
       await request
@@ -73,6 +78,17 @@ export async function POST(
         passwordError
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'PASSWORD_CHANGE_FAILED',
+        targetType: 'player',
+        targetId: user.id,
+        description: 'Unable to change password.',
+        error: passwordError,
+        context: { stage: 'update_auth_password' },
+      });
+
       return NextResponse.json(
         {
           message:
@@ -112,6 +128,17 @@ export async function POST(
         profileError
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'PASSWORD_CHANGE_FAILED',
+        targetType: 'player',
+        targetId: user.id,
+        description: 'Password changed, but the must_change_password flag could not be cleared.',
+        error: profileError,
+        context: { stage: 'clear_reset_flag' },
+      });
+
       return NextResponse.json(
         {
           message:
@@ -131,6 +158,17 @@ export async function POST(
       '[CHANGE PASSWORD]',
       error
     );
+
+    await writeErrorAuditLog({
+      actorId: authedUserId,
+      actorRole: authedUserId ? 'player' : null,
+      action: 'PASSWORD_CHANGE_FAILED',
+      targetType: 'player',
+      targetId: authedUserId,
+      description: 'Unexpected error while changing password.',
+      error,
+      context: { stage: 'unexpected' },
+    });
 
     return NextResponse.json(
       {

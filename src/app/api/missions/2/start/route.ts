@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { writeErrorAuditLog } from '@/lib/audit';
 
 export async function POST() {
+  let authedUserId: string | null = null;
+
   try {
     const supabase =
       await createClient();
@@ -32,6 +35,8 @@ export async function POST() {
       );
     }
 
+    authedUserId = user.id;
+
     // ----------------------------------
     // PLAYER PROFILE
     // ----------------------------------
@@ -45,7 +50,8 @@ export async function POST() {
         id,
         role,
         is_active,
-        onboarding_complete
+        onboarding_complete,
+        work_location_type
       `)
       .eq('id', user.id)
       .single();
@@ -58,6 +64,17 @@ export async function POST() {
         '[MISSION 02] Profile error:',
         profileError
       );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_START_FAILED',
+        targetType: 'mission',
+        targetId: '2',
+        description: 'Unable to load profile while starting Mission 02.',
+        error: profileError ?? new Error('Profile not found.'),
+        context: { stage: 'load_profile' },
+      });
 
       return NextResponse.json(
         {
@@ -117,6 +134,21 @@ export async function POST() {
       );
     }
 
+    if (
+      !profile.work_location_type
+    ) {
+      return NextResponse.json(
+        {
+          code: 'WORKGROUP_REQUIRED',
+          message:
+            'Choose your department or branch before starting the mission.',
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
     // ----------------------------------
     // LOAD MISSION 02
     // ----------------------------------
@@ -142,6 +174,17 @@ export async function POST() {
         '[MISSION 02] Mission error:',
         missionError
       );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_START_FAILED',
+        targetType: 'mission',
+        targetId: '2',
+        description: 'Unable to load Mission 02 data while starting it.',
+        error: missionError ?? new Error('Mission not found.'),
+        context: { stage: 'load_mission' },
+      });
 
       return NextResponse.json(
         {
@@ -172,6 +215,8 @@ export async function POST() {
     const forcedOpen =
       mission.status ===
         'forced_open' ||
+      mission.status ===
+        'live' ||
       mission.status ===
         'open';
 
@@ -241,6 +286,17 @@ export async function POST() {
         '[MISSION 02] Attempt lookup error:',
         attemptLookupError
       );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_START_FAILED',
+        targetType: 'mission',
+        targetId: '2',
+        description: 'Unable to check existing Mission 02 progress.',
+        error: attemptLookupError,
+        context: { stage: 'attempt_lookup' },
+      });
 
       return NextResponse.json(
         {
@@ -322,6 +378,17 @@ export async function POST() {
         createError
       );
 
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_START_FAILED',
+        targetType: 'mission',
+        targetId: '2',
+        description: 'Unable to create a Mission 02 attempt.',
+        error: createError ?? new Error('Attempt creation returned no row.'),
+        context: { stage: 'create_attempt' },
+      });
+
       return NextResponse.json(
         {
           code:
@@ -354,6 +421,17 @@ export async function POST() {
       '[MISSION 02 START]',
       error
     );
+
+    await writeErrorAuditLog({
+      actorId: authedUserId,
+      actorRole: authedUserId ? 'player' : null,
+      action: 'MISSION_START_FAILED',
+      targetType: 'mission',
+      targetId: '2',
+      description: 'Unexpected error while starting Mission 02.',
+      error,
+      context: { stage: 'unexpected' },
+    });
 
     return NextResponse.json(
       {

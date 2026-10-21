@@ -44,6 +44,7 @@ export default function MissionOneReport({
       const contentType =
   response.headers.get('content-type');
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed JSON/text response of unknown shape
 let body: any = null;
 
 if (
