@@ -69,7 +69,25 @@ export default function VoiceAnalysisSummary({
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data?.message ?? 'Unable to finalize this section.');
+        // The player may have finished the section before a round was
+        // added to it (e.g. a mid-event content update) -- naming the
+        // specific missing round(s) here, rather than a generic
+        // message, makes that recoverable instead of confusing: they
+        // just need to reload this page to be routed into it.
+        const missingLabels = Array.isArray(data?.missing)
+          ? data.missing
+              .map(
+                (key: string) =>
+                  SUMMARY_ROWS.find((row) => row.key === key)?.label ?? key
+              )
+              .join(', ')
+          : '';
+
+        throw new Error(
+          missingLabels
+            ? `Missing: ${missingLabels}. Reload this page to complete the remaining round(s).`
+            : data?.message ?? 'Unable to finalize this section.'
+        );
       }
 
       router.push('/missions/3/play/email');
