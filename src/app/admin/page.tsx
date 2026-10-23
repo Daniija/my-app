@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import AdminMissionControls from '@/components/AdminMissionControls';
 import MissionScheduleButton from '@/components/admin/MissionScheduleButton';
+import AdminResetStuckAttempts from '@/components/admin/AdminResetStuckAttempts';
 import { requireAdmin } from '@/lib/admin';
 import MissionStatusBadge from '@/components/admin/MissionStatusBadge';
 
@@ -247,6 +248,24 @@ export default async function AdminPage() {
                   missionTitle={m.title}
                   unlockAt={m.unlock_at}
                 />
+              </div>
+
+              {/* RESET STUCK ATTEMPTS */}
+              <div className="mt-5 border-t border-[var(--line)] pt-5">
+                <p className="mb-2 text-xs font-bold tracking-[0.14em] text-red-400">
+                  TROUBLESHOOTING
+                </p>
+
+                <AdminResetStuckAttempts
+                  missionId={m.id}
+                  missionTitle={m.title}
+                />
+
+                <p className="muted mt-2 text-xs">
+                  Only resets players still stuck at the briefing screen
+                  with zero progress -- never touches anyone who has
+                  actually started or completed {m.title}.
+                </p>
               </div>
 
               {/* ADMIN PREVIEW - ALL MISSIONS */}

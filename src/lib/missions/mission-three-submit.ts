@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 
 import { createClient } from '@/lib/supabase/server';
 import { writeErrorAuditLog } from '@/lib/audit';
+import {
+  MISSION_THREE_STAGE_ORDER,
+  type MissionThreeStageName,
+} from '@/lib/missions/mission-three-stage-page';
 
 export type MissionThreeStageResult = {
   outcome: 'correct' | 'partial' | 'incorrect';
@@ -85,6 +89,52 @@ export async function submitMissionThreeStage({
       attempt.status !== 'active' ||
       attempt.current_stage !== fromStage
     ) {
+      // If the attempt has already moved past fromStage, this is a
+      // duplicate/raced submission (e.g. a dropped response the client
+      // retried, or an "ended" event firing twice) rather than a real
+      // error -- return the already-saved result instead of a dead-end
+      // 409, so the client can still continue forward. Without this, a
+      // player can get stuck on this stage's screen forever, since
+      // retrying would hit this exact same mismatch again. Mirrors the
+      // idempotency handling already in voice/submit/route.ts.
+      const fromIndex = MISSION_THREE_STAGE_ORDER.indexOf(
+        fromStage as MissionThreeStageName
+      );
+
+      const currentIndex = attempt.current_stage
+        ? MISSION_THREE_STAGE_ORDER.indexOf(
+            attempt.current_stage as MissionThreeStageName
+          )
+        : -1;
+
+      if (
+        attempt.status === 'active' &&
+        fromIndex !== -1 &&
+        currentIndex > fromIndex
+      ) {
+        const { data: progressRow } = await supabase
+          .from('mission_progress')
+          .select('progress')
+          .eq('attempt_id', attempt.id)
+          .maybeSingle();
+
+        const savedStageResult = (
+          progressRow?.progress as
+            | Record<string, MissionThreeStageResult>
+            | null
+        )?.[fromStage];
+
+        return NextResponse.json(
+          {
+            ok: true,
+            outcome: savedStageResult?.outcome ?? 'correct',
+            points: savedStageResult?.points ?? 0,
+            nextStage: attempt.current_stage,
+          },
+          { headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
       return NextResponse.json(
         {
           message:
