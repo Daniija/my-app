@@ -25,3 +25,78 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .btn-danger { background: #3a1820; color: #ffd8dc; border-color: #6a2b37; }
 .badge { display:inline-flex; align-items:center; gap:.4rem; border:1px solid var(--line); border-radius:999px; padding:.35rem .65rem; font-size:.78rem; }
 .muted { color: var(--muted); }
+
+/* ================================================================
+   MISSION 03 -- Hacker Transmission static/glitch interruption
+   (src/components/mission-three/StaticInterference.tsx)
+   ================================================================ */
+@keyframes mission3-flicker {
+  0%, 100% { opacity: 1; }
+  10% { opacity: .4; }
+  20% { opacity: .9; }
+  30% { opacity: .3; }
+  45% { opacity: 1; }
+  55% { opacity: .5; }
+  70% { opacity: .85; }
+  80% { opacity: .35; }
+  90% { opacity: .95; }
+}
+
+@keyframes mission3-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, -2px); }
+  80% { transform: translate(1px, 2px); }
+}
+
+@keyframes mission3-scan {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 100%; }
+}
+
+@keyframes mission3-glitch-bar {
+  0%, 100% { opacity: 0; transform: translateX(0) scaleX(1); }
+  5% { opacity: .9; transform: translateX(-6%) scaleX(1.1); }
+  10% { opacity: 0; }
+  45% { opacity: .8; transform: translateX(4%) scaleX(.9); }
+  50% { opacity: 0; }
+}
+
+.mission3-static { position: fixed; inset: 0; z-index: 50; background: #000; overflow: hidden; }
+
+.mission3-static__noise {
+  position: absolute;
+  inset: -10%;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.06) 0px, rgba(255,255,255,.06) 1px, transparent 1px, transparent 3px),
+    repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.08), rgba(255,255,255,0) 2px);
+  background-size: 100% 4px, 6px 6px;
+  animation: mission3-flicker .18s steps(2) infinite, mission3-shake .22s steps(1) infinite;
+}
+
+.mission3-static__scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to bottom, rgba(255,255,255,.05) 0 2px, transparent 2px 4px);
+  animation: mission3-scan 1s linear infinite;
+  mix-blend-mode: overlay;
+}
+
+.mission3-static__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6%;
+  background: rgba(255,60,60,.5);
+  mix-blend-mode: screen;
+  animation: mission3-glitch-bar 1.6s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mission3-static__noise,
+  .mission3-static__scanlines,
+  .mission3-static__bar {
+    animation: none;
+  }
+}

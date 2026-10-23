@@ -132,7 +132,8 @@ export async function GET() {
         mission_3_score,
         mission_4_score,
         total_score,
-        completed_count
+        completed_count,
+        total_time_override_seconds
       `)
       .in(
         'player_id',
@@ -196,10 +197,14 @@ export async function GET() {
       (data ?? []).map(
         (row) => ({
           ...row,
+          // An admin-set override takes precedence over the computed
+          // sum of mission_attempts durations -- see migration 014.
           total_time_seconds:
+            row.total_time_override_seconds ??
             completionTimes.get(
               row.player_id
-            )?.totalSeconds ?? 0,
+            )?.totalSeconds ??
+            0,
         })
       );
 

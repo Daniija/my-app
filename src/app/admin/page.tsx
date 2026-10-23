@@ -100,6 +100,13 @@ export default async function AdminPage() {
 
           <Link
             className="btn btn-secondary"
+            href="/admin/leaderboard"
+          >
+            Leaderboard Times
+          </Link>
+
+          <Link
+            className="btn btn-secondary"
             href="/admin/password-resets"
           >
             Password Resets

@@ -1,5 +1,10 @@
 import AdminPlayerActions from '@/components/AdminPlayerActions';
+import {
+  AdminOnlineProvider,
+  OnlineDot,
+} from '@/components/admin/AdminOnlineProvider';
 import { requireAdmin } from '@/lib/admin';
+import { isOnline } from '@/lib/presence';
 
 export default async function PlayersPage() {
   const { supabase } = await requireAdmin();
@@ -15,11 +20,16 @@ export default async function PlayersPage() {
       is_active,
       onboarding_complete,
       must_change_password,
-      created_at
+      created_at,
+      last_seen_at
     `)
     .order('created_at', {
       ascending: true,
     });
+
+  const initialOnlineIds = (players ?? [])
+    .filter((p) => isOnline(p.last_seen_at))
+    .map((p) => p.id);
 
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -36,6 +46,7 @@ export default async function PlayersPage() {
         and manage privileged admin roles.
       </p>
 
+      <AdminOnlineProvider initialOnlineIds={initialOnlineIds}>
       <div className="mt-6 overflow-x-auto rounded-2xl border border-[var(--line)]">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-[#07141d] text-[var(--muted)]">
@@ -83,7 +94,10 @@ export default async function PlayersPage() {
                   key={p.id}
                 >
                   <td className="p-3 font-mono">
-                    {p.username || '—'}
+                    <span className="inline-flex items-center gap-2">
+                      <OnlineDot playerId={p.id} />
+                      {p.username || '—'}
+                    </span>
                   </td>
 
                   <td className="p-3 font-bold">
@@ -141,6 +155,7 @@ export default async function PlayersPage() {
           </tbody>
         </table>
       </div>
+      </AdminOnlineProvider>
     </main>
   );
 }
