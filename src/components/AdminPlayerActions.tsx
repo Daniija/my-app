@@ -9,7 +9,8 @@ type Action =
   | 'make_admin'
   | 'make_player'
   | 'delete'
-  | 'reset_password';
+  | 'reset_password'
+  | 'reset_mission_3';
 
 type ConfirmRequest = {
   action: Action;
@@ -120,10 +121,54 @@ export default function AdminPlayerActions({
   }
 
   // ==================================
+  // RESET MISSION 3
+  // ==================================
+
+  async function performResetMission() {
+    setBusyAction('reset_mission_3');
+
+    try {
+      const response = await fetch('/api/admin/players/reset-mission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId, missionId: 3 }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || data.message || `Reset failed (${response.status}).`
+        );
+      }
+
+      if (data.reset) {
+        router.refresh();
+      } else if (data.reason === 'already_completed') {
+        setErrorMessage(
+          `${playerName} has already completed Mission 3 with a real score, so nothing was reset.`
+        );
+      } else if (data.reason === 'no_attempt') {
+        setErrorMessage(
+          `${playerName} doesn't have a Mission 3 attempt to reset.`
+        );
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to reset Mission 3.'
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  // ==================================
   // ACTIVATE / DEACTIVATE / ROLE / DELETE
   // ==================================
 
-  async function performAction(action: Exclude<Action, 'reset_password'>) {
+  async function performAction(
+    action: Exclude<Action, 'reset_password' | 'reset_mission_3'>
+  ) {
     setBusyAction(action);
 
     try {
@@ -181,11 +226,26 @@ export default function AdminPlayerActions({
     setConfirmRequest({ action, title, description, confirmLabel, danger });
   }
 
+  function requestResetMission() {
+    requestAction(
+      'reset_mission_3',
+      'Reset Mission 3 attempt?',
+      `Reset ${playerName}'s Mission 3 attempt and progress so they can start over? This never touches a real completed score.`,
+      'Reset Mission 3',
+      true
+    );
+  }
+
   function handleConfirm() {
     if (!confirmRequest) return;
 
     const { action } = confirmRequest;
     setConfirmRequest(null);
+
+    if (action === 'reset_mission_3') {
+      performResetMission();
+      return;
+    }
 
     if (action === 'reset_password') {
       performResetPassword();
@@ -221,6 +281,21 @@ export default function AdminPlayerActions({
           {busyAction === 'reset_password'
             ? 'Resetting...'
             : 'Reset Password'}
+        </button>
+      )}
+
+      {/* RESET MISSION 3 */}
+
+      {role === 'player' && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={requestResetMission}
+          className="btn btn-danger"
+        >
+          {busyAction === 'reset_mission_3'
+            ? 'Resetting...'
+            : 'Reset Mission 3'}
         </button>
       )}
 

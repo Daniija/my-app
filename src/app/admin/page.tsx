@@ -2,6 +2,7 @@ import Link from 'next/link';
 import AdminMissionControls from '@/components/AdminMissionControls';
 import MissionScheduleButton from '@/components/admin/MissionScheduleButton';
 import AdminResetStuckAttempts from '@/components/admin/AdminResetStuckAttempts';
+import AdminResetAllAttempts from '@/components/admin/AdminResetAllAttempts';
 import { requireAdmin } from '@/lib/admin';
 import MissionStatusBadge from '@/components/admin/MissionStatusBadge';
 
@@ -256,15 +257,24 @@ export default async function AdminPage() {
                   TROUBLESHOOTING
                 </p>
 
-                <AdminResetStuckAttempts
-                  missionId={m.id}
-                  missionTitle={m.title}
-                />
+                <div className="flex flex-wrap gap-2">
+                  <AdminResetStuckAttempts
+                    missionId={m.id}
+                    missionTitle={m.title}
+                  />
+
+                  <AdminResetAllAttempts
+                    missionId={m.id}
+                    missionTitle={m.title}
+                  />
+                </div>
 
                 <p className="muted mt-2 text-xs">
-                  Only resets players still stuck at the briefing screen
-                  with zero progress -- never touches anyone who has
-                  actually started or completed {m.title}.
+                  &quot;Reset Stuck Attempts&quot; only resets players still
+                  stuck at the briefing screen with zero progress.
+                  &quot;Reset All Attempts&quot; resets every in-progress attempt
+                  for {m.title} no matter the stage -- both leave anyone who
+                  has already fully completed it untouched.
                 </p>
               </div>
 
