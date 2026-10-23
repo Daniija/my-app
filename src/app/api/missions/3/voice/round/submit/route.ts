@@ -164,7 +164,35 @@ export async function POST(request: Request) {
       progress as Record<string, Record<string, typeof roundResult>> | null
     )?.voice_rounds;
 
-    const saved = savedRounds?.[round.id] ?? roundResult;
+    const saved = savedRounds?.[round.id];
+
+    // The RPC returned without error, but didn't actually confirm this
+    // round was saved -- treat that as a failure rather than silently
+    // falling back to the locally computed result, which previously
+    // made a real persistence bug (migration 011's jsonb_set path
+    // limitation, fixed in migration 019) invisible to every player.
+    if (!saved) {
+      console.error(
+        '[MISSION 03 VOICE ROUND] RPC succeeded but did not confirm the save for',
+        round.id
+      );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_VOICE_ROUND_SAVE_FAILED',
+        targetType: 'mission',
+        targetId: '3',
+        description: `Mission 03 voice round ${round.id} was not confirmed as saved.`,
+        error: new Error('RPC returned no matching saved round data.'),
+        context: { round: round.id, progress },
+      });
+
+      return NextResponse.json(
+        { message: 'Unable to save your answer.' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
       {

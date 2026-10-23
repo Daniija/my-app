@@ -150,7 +150,33 @@ export async function POST(request: Request) {
       progress as Record<string, Record<string, FinalChallengeRoundResult>> | null
     )?.voice_rounds;
 
-    const saved = savedRounds?.final_challenge ?? roundResult;
+    const saved = savedRounds?.final_challenge;
+
+    // Same reasoning as voice/round/submit/route.ts: don't silently
+    // fall back to the locally computed result when the RPC didn't
+    // actually confirm the save -- that fallback is what made the
+    // migration 011 jsonb_set bug (fixed in migration 019) invisible.
+    if (!saved) {
+      console.error(
+        '[MISSION 03 VOICE FINAL CHALLENGE] RPC succeeded but did not confirm the save'
+      );
+
+      await writeErrorAuditLog({
+        actorId: user.id,
+        actorRole: 'player',
+        action: 'MISSION_VOICE_ROUND_SAVE_FAILED',
+        targetType: 'mission',
+        targetId: '3',
+        description: 'Mission 03 voice final challenge was not confirmed as saved.',
+        error: new Error('RPC returned no matching saved round data.'),
+        context: { round: 'final_challenge', progress },
+      });
+
+      return NextResponse.json(
+        { message: 'Unable to save your answers.' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
       {
