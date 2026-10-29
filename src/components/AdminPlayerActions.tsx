@@ -10,7 +10,21 @@ type Action =
   | 'make_player'
   | 'delete'
   | 'reset_password'
-  | 'reset_mission_3';
+  | 'reset_mission_1'
+  | 'reset_mission_2'
+  | 'reset_mission_3'
+  | 'reset_mission_4'
+  | 'make_tester'
+  | 'remove_tester';
+
+const RESET_MISSION_ACTIONS = [
+  'reset_mission_1',
+  'reset_mission_2',
+  'reset_mission_3',
+  'reset_mission_4',
+] as const;
+
+type ResetMissionAction = (typeof RESET_MISSION_ACTIONS)[number];
 
 type ConfirmRequest = {
   action: Action;
@@ -57,12 +71,14 @@ export default function AdminPlayerActions({
   playerId,
   active,
   role,
+  isTester,
   alias,
   username,
 }: {
   playerId: string;
   active: boolean;
   role: string;
+  isTester?: boolean;
   alias?: string | null;
   username?: string | null;
 }) {
@@ -121,17 +137,21 @@ export default function AdminPlayerActions({
   }
 
   // ==================================
-  // RESET MISSION 3
+  // RESET MISSION (any of 1-4 -- testers in particular need to
+  // replay any mission repeatedly while it's being validated before
+  // launch, not just Mission 3)
   // ==================================
 
-  async function performResetMission() {
-    setBusyAction('reset_mission_3');
+  async function performResetMission(action: ResetMissionAction) {
+    const missionId = Number(action.slice('reset_mission_'.length));
+
+    setBusyAction(action);
 
     try {
       const response = await fetch('/api/admin/players/reset-mission', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId, missionId: 3 }),
+        body: JSON.stringify({ playerId, missionId }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -146,16 +166,18 @@ export default function AdminPlayerActions({
         router.refresh();
       } else if (data.reason === 'already_completed') {
         setErrorMessage(
-          `${playerName} has already completed Mission 3 with a real score, so nothing was reset.`
+          `${playerName} has already completed Mission ${missionId} with a real score, so nothing was reset.`
         );
       } else if (data.reason === 'no_attempt') {
         setErrorMessage(
-          `${playerName} doesn't have a Mission 3 attempt to reset.`
+          `${playerName} doesn't have a Mission ${missionId} attempt to reset.`
         );
       }
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to reset Mission 3.'
+        error instanceof Error
+          ? error.message
+          : `Unable to reset Mission ${missionId}.`
       );
     } finally {
       setBusyAction(null);
@@ -167,7 +189,7 @@ export default function AdminPlayerActions({
   // ==================================
 
   async function performAction(
-    action: Exclude<Action, 'reset_password' | 'reset_mission_3'>
+    action: Exclude<Action, 'reset_password' | ResetMissionAction>
   ) {
     setBusyAction(action);
 
@@ -226,14 +248,20 @@ export default function AdminPlayerActions({
     setConfirmRequest({ action, title, description, confirmLabel, danger });
   }
 
-  function requestResetMission() {
+  function requestResetMission(missionId: number) {
+    const action = `reset_mission_${missionId}` as ResetMissionAction;
+
     requestAction(
-      'reset_mission_3',
-      'Reset Mission 3 attempt?',
-      `Reset ${playerName}'s Mission 3 attempt and progress so they can start over? This never touches a real completed score.`,
-      'Reset Mission 3',
+      action,
+      `Reset Mission ${missionId} attempt?`,
+      `Reset ${playerName}'s Mission ${missionId} attempt and progress so they can start over? This never touches a real completed score.`,
+      `Reset Mission ${missionId}`,
       true
     );
+  }
+
+  function isResetMissionAction(action: Action): action is ResetMissionAction {
+    return (RESET_MISSION_ACTIONS as readonly string[]).includes(action);
   }
 
   function handleConfirm() {
@@ -242,8 +270,8 @@ export default function AdminPlayerActions({
     const { action } = confirmRequest;
     setConfirmRequest(null);
 
-    if (action === 'reset_mission_3') {
-      performResetMission();
+    if (isResetMissionAction(action)) {
+      performResetMission(action);
       return;
     }
 
@@ -252,6 +280,17 @@ export default function AdminPlayerActions({
     } else {
       performAction(action);
     }
+  }
+
+  function requestSetTester(nextIsTester: boolean) {
+    requestAction(
+      nextIsTester ? 'make_tester' : 'remove_tester',
+      nextIsTester ? 'Mark as mission tester?' : 'Remove tester status?',
+      nextIsTester
+        ? `${playerName} will be able to play any mission's real flow before it unlocks publicly, and their scores will never appear on the real leaderboard.`
+        : `${playerName} will go back to being a normal player. If they already have real mission scores, their leaderboard entry will be restored.`,
+      nextIsTester ? 'Mark as tester' : 'Remove tester'
+    );
   }
 
   async function copyPassword() {
@@ -284,18 +323,41 @@ export default function AdminPlayerActions({
         </button>
       )}
 
-      {/* RESET MISSION 3 */}
+      {/* RESET MISSION (1-4) */}
+
+      {role === 'player' &&
+        RESET_MISSION_ACTIONS.map((action, index) => {
+          const missionId = index + 1;
+
+          return (
+            <button
+              key={action}
+              type="button"
+              disabled={busy}
+              onClick={() => requestResetMission(missionId)}
+              className="btn btn-danger"
+            >
+              {busyAction === action
+                ? 'Resetting...'
+                : `Reset Mission ${missionId}`}
+            </button>
+          );
+        })}
+
+      {/* TESTER STATUS */}
 
       {role === 'player' && (
         <button
           type="button"
           disabled={busy}
-          onClick={requestResetMission}
-          className="btn btn-danger"
+          onClick={() => requestSetTester(!isTester)}
+          className="btn btn-secondary"
         >
-          {busyAction === 'reset_mission_3'
-            ? 'Resetting...'
-            : 'Reset Mission 3'}
+          {busyAction === 'make_tester' || busyAction === 'remove_tester'
+            ? 'Updating...'
+            : isTester
+              ? 'Remove Tester'
+              : 'Mark as Tester'}
         </button>
       )}
 

@@ -18,6 +18,7 @@ export default async function PlayersPage() {
       department,
       role,
       is_active,
+      is_tester,
       onboarding_complete,
       must_change_password,
       created_at,
@@ -72,6 +73,10 @@ export default async function PlayersPage() {
               </th>
 
               <th className="p-3">
+                Tester
+              </th>
+
+              <th className="p-3">
                 Onboarding
               </th>
 
@@ -121,6 +126,20 @@ export default async function PlayersPage() {
                   </td>
 
                   <td className="p-3">
+                    {p.is_tester
+                      ? (
+                        <span className="badge border-[var(--accent)] text-[var(--accent)]">
+                          TESTER
+                        </span>
+                      )
+                      : (
+                        <span className="muted">
+                          —
+                        </span>
+                      )}
+                  </td>
+
+                  <td className="p-3">
                     {p.onboarding_complete
                       ? 'Complete'
                       : 'Pending'}
@@ -145,6 +164,7 @@ export default async function PlayersPage() {
                       playerId={p.id}
                       active={p.is_active}
                       role={p.role}
+                      isTester={p.is_tester}
                       alias={p.alias}
                       username={p.username}
                     />

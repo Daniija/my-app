@@ -9,7 +9,9 @@ type PlayerAction =
   | 'deactivate'
   | 'make_admin'
   | 'make_player'
-  | 'delete';
+  | 'delete'
+  | 'make_tester'
+  | 'remove_tester';
 
 const allowedActions: PlayerAction[] = [
   'activate',
@@ -17,6 +19,8 @@ const allowedActions: PlayerAction[] = [
   'make_admin',
   'make_player',
   'delete',
+  'make_tester',
+  'remove_tester',
 ];
 
 export async function POST(request: Request) {
@@ -213,6 +217,103 @@ export async function POST(request: Request) {
         ok: true,
         action,
         playerId,
+      });
+    }
+
+    if (
+      action === 'make_tester' ||
+      action === 'remove_tester'
+    ) {
+      if (target.role !== 'player') {
+        return NextResponse.json(
+          {
+            error:
+              'Only player accounts can be marked as mission testers.',
+          },
+          { status: 400 }
+        );
+      }
+
+      const isTester = action === 'make_tester';
+
+      const {
+        error: testerUpdateError,
+      } = await admin
+        .from('profiles')
+        .update({ is_tester: isTester })
+        .eq('id', playerId);
+
+      if (testerUpdateError) {
+        console.error(
+          '[ADMIN PLAYERS] Tester flag update failed:',
+          testerUpdateError
+        );
+
+        await writeErrorAuditLog({
+          actorId: adminProfile.id,
+          actorAlias: adminProfile.alias ?? adminProfile.username,
+          actorRole: 'admin',
+          action: 'PLAYER_ACTION_FAILED',
+          targetType: 'player',
+          targetId: playerId,
+          description: `Unable to ${action} for ${target.alias ?? target.username ?? playerId}.`,
+          error: testerUpdateError,
+          context: { stage: 'update_is_tester', action },
+        });
+
+        return NextResponse.json(
+          {
+            error:
+              testerUpdateError.message ||
+              'Unable to update tester status.',
+          },
+          { status: 500 }
+        );
+      }
+
+      if (isTester) {
+        // Testers must never appear on the real leaderboard. The DB
+        // trigger (migration 023) blocks every future write for
+        // them, but a stale row from before they were flagged (if
+        // they'd already played and scored as a regular player)
+        // needs this one-time explicit cleanup, since the trigger
+        // only intercepts INSERT/UPDATE, not an existing row.
+        const {
+          error: leaderboardDeleteError,
+        } = await admin
+          .from('leaderboard_entries')
+          .delete()
+          .eq('player_id', playerId);
+
+        if (leaderboardDeleteError) {
+          console.warn(
+            '[ADMIN PLAYERS] Unable to remove new tester from leaderboard:',
+            leaderboardDeleteError
+          );
+        }
+      } else {
+        // Un-flagging: restore their real leaderboard row from
+        // whatever mission_scores they already have, using the same
+        // SQL function the score-write trigger itself calls.
+        const {
+          error: refreshError,
+        } = await admin.rpc('refresh_leaderboard_for_player', {
+          p_player: playerId,
+        });
+
+        if (refreshError) {
+          console.warn(
+            '[ADMIN PLAYERS] Unable to restore leaderboard entry for former tester:',
+            refreshError
+          );
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        action,
+        playerId,
+        is_tester: isTester,
       });
     }
 

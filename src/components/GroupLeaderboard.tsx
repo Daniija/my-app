@@ -115,7 +115,7 @@ export default function GroupLeaderboard({
 
           <div className="text-right">
             <p className="muted text-[0.6rem] uppercase tracking-wide">
-              Avg score
+              Points
             </p>
 
             <p className="tabular-nums text-2xl font-black">

@@ -50,6 +50,7 @@ export async function POST() {
         id,
         role,
         is_active,
+        is_tester,
         onboarding_complete,
         work_location_type
       `)
@@ -235,7 +236,8 @@ export async function POST() {
     const available =
       !unavailable &&
       (forcedOpen ||
-        scheduledOpen);
+        scheduledOpen ||
+        profile.is_tester);
 
     if (!available) {
       return NextResponse.json(

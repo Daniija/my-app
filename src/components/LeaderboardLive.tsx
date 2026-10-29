@@ -18,30 +18,7 @@ type Row = {
   mission_4_score: number;
   total_score: number;
   completed_count: number;
-  total_time_seconds?: number;
 };
-
-// Formats a total number of seconds into a compact clock-style duration.
-// Returns an em dash when a player has not completed any mission yet.
-function formatDuration(totalSeconds?: number) {
-  if (!totalSeconds || totalSeconds <= 0) {
-    return '—';
-  }
-
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  if (minutes > 0) {
-    return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
-  }
-
-  return `${seconds}s`;
-}
 
 export default function LeaderboardLive({
   initial,
@@ -224,7 +201,7 @@ export default function LeaderboardLive({
                 key={
                   row.player_id
                 }
-                className={`card grid grid-cols-[3rem_1fr_auto_auto] items-center gap-3 p-4 ${
+                className={`card grid grid-cols-[3rem_1fr_auto] items-center gap-3 p-4 ${
                   index < 3
                     ? 'border-[var(--accent)]'
                     : ''
@@ -263,18 +240,6 @@ export default function LeaderboardLive({
                     Finale{' '}
                     {row.mission_4_score ||
                       '—'}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="muted text-[0.6rem] uppercase tracking-wide">
-                    Time
-                  </p>
-
-                  <p className="tabular-nums text-sm font-bold">
-                    {formatDuration(
-                      row.total_time_seconds
-                    )}
                   </p>
                 </div>
 

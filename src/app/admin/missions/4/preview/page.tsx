@@ -1,22 +1,13 @@
-import MissionPreviewComingSoon from '@/components/admin/MissionPreviewComingSoon';
+import MissionFourBriefing from '@/components/mission-four/MissionFourBriefing';
 import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
+// Replaces the previous MissionPreviewComingSoon placeholder now that
+// Mission 04's infrastructure exists. Mirrors
+// src/app/admin/missions/3/preview/page.tsx exactly.
 export default async function MissionFourAdminPreviewPage() {
-  const { supabase, profile } = await requireAdmin();
+  await requireAdmin();
 
-  const { data: mission } = await supabase
-    .from('missions')
-    .select('sequence,title')
-    .eq('id', 4)
-    .single();
-
-  return (
-    <MissionPreviewComingSoon
-      playerAlias={profile.alias ?? 'Administrator'}
-      missionSequence={mission?.sequence ?? 4}
-      missionTitle={mission?.title ?? 'Zero Hour'}
-    />
-  );
+  return <MissionFourBriefing initialAttempt={null} previewMode />;
 }

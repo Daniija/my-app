@@ -46,6 +46,7 @@ export default async function DashboardPage() {
         department,
         role,
         is_active,
+        is_tester,
         onboarding_complete,
         work_location_type
       `)
@@ -621,7 +622,8 @@ export default async function DashboardPage() {
                 !emergencyLocked &&
                 (
                   forcedOpen ||
-                  timeUnlocked
+                  timeUnlocked ||
+                  profile.is_tester
                 );
 
 
