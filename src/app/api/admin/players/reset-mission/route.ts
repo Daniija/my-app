@@ -84,7 +84,46 @@ export async function POST(request: Request) {
 
     const isTester = target.is_tester === true;
 
-    if (!isTester) {
+    // Mission 04's finalizeMissionFourFailure() (added this session,
+    // alongside the challenge-submit time-expiry fix) now correctly
+    // writes a mission_scores row for a player who simply ran out of
+    // the clock, same as a real success -- previously that path was
+    // broken, so almost no player had a mission_scores row for a
+    // timed-out attempt and this "already_completed" guard rarely
+    // fired for mission 4. Now that failures are finalized properly,
+    // this guard was blocking resets for most mission 4 players, not
+    // just the ones who genuinely succeeded. A failed/timed-out
+    // attempt was never meant to be protected -- only a real
+    // completion was -- so for mission 4 specifically, check
+    // mission_progress.progress.report.outcome and let a 'failed'
+    // result through the guard exactly like a tester.
+    let bypassCompletedGuard = isTester;
+
+    if (!bypassCompletedGuard && missionId === 4) {
+      const { data: m4Attempt } = await admin
+        .from('mission_attempts')
+        .select('id')
+        .eq('player_id', playerId)
+        .eq('mission_id', 4)
+        .maybeSingle();
+
+      if (m4Attempt) {
+        const { data: m4ProgressRow } = await admin
+          .from('mission_progress')
+          .select('progress')
+          .eq('attempt_id', m4Attempt.id)
+          .maybeSingle();
+
+        const report = (m4ProgressRow?.progress as Record<string, unknown> | null)
+          ?.report as { outcome?: string } | undefined;
+
+        if (report?.outcome === 'failed') {
+          bypassCompletedGuard = true;
+        }
+      }
+    }
+
+    if (!bypassCompletedGuard) {
       const { data: existingScore, error: scoreCheckError } = await admin
         .from('mission_scores')
         .select('id')

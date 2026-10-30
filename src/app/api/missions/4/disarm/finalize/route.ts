@@ -5,6 +5,7 @@ import { getStageCompletion, submitMissionFourStage } from '@/lib/missions/missi
 import { getMissionFourStage } from '@/lib/missions/mission-four-data';
 import { finalizeMissionFourScore } from '@/lib/missions/mission-four-finalize';
 import {
+  clampStageScore,
   computeRemainingSeconds,
   MISSION_COMPLETION_TIME_BONUS_PER_SECOND,
   MISSION_FOUR_STAGE_ORDER,
@@ -102,8 +103,18 @@ export async function POST() {
     : 0;
 
   const missionCompletionBonus = remainingSeconds * MISSION_COMPLETION_TIME_BONUS_PER_SECOND;
-  const disarmPoints =
-    completion.totalPoints + stageDefinition.completionBonus + missionCompletionBonus;
+
+  // Keep this stage's own points within its own 800-point budget --
+  // the mission-wide "finished with time to spare" bonus below is a
+  // separate reward, not part of DISARM's own challenge score, and
+  // folding it directly into `points` here is what made the report's
+  // Stage Breakdown show e.g. "886 / 800" for DISARM. The bonus still
+  // counts toward the player's total via rawTotal below, just under
+  // its own key instead of inflating this stage's number past its cap.
+  const disarmPoints = clampStageScore(
+    'disarm',
+    completion.totalPoints + stageDefinition.completionBonus
+  );
 
   const submitResponse = await submitMissionFourStage({
     fromStage: 'disarm',
@@ -114,6 +125,7 @@ export async function POST() {
       points: disarmPoints,
       completed: true,
       remainingSecondsAtCompletion: remainingSeconds,
+      missionCompletionBonus,
     }),
   });
 
@@ -133,12 +145,16 @@ export async function POST() {
     .maybeSingle();
 
   const finalProgress =
-    (finalProgressRow?.progress as Record<string, { points?: number }>) ?? {};
+    (finalProgressRow?.progress as Record<
+      string,
+      { points?: number; missionCompletionBonus?: number }
+    >) ?? {};
 
-  const rawTotal = MISSION_FOUR_STAGE_ORDER.reduce(
-    (sum, stage) => sum + (finalProgress[stage]?.points ?? 0),
-    0
-  );
+  const rawTotal =
+    MISSION_FOUR_STAGE_ORDER.reduce(
+      (sum, stage) => sum + (finalProgress[stage]?.points ?? 0),
+      0
+    ) + (finalProgress.disarm?.missionCompletionBonus ?? 0);
 
   const { data: profile } = await supabase
     .from('profiles')

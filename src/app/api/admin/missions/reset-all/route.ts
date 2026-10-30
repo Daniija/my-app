@@ -48,13 +48,57 @@ async function findResetEligibleAttempts(
 
   const scoredPlayerIds = new Set((scored ?? []).map((row) => row.player_id));
 
-  const eligible = (
-    attempts as unknown as Array<{
-      id: string;
-      player_id: string;
-      profiles: { alias: string | null; username: string | null } | null;
-    }>
-  ).filter((attempt) => !scoredPlayerIds.has(attempt.player_id));
+  const typedAttempts = attempts as unknown as Array<{
+    id: string;
+    player_id: string;
+    profiles: { alias: string | null; username: string | null } | null;
+  }>;
+
+  // Mission 04 only: a mission_scores row no longer means "really
+  // completed" -- finalizeMissionFourFailure() (added this session,
+  // alongside the challenge-submit time-expiry fix) now also writes
+  // one for a player who simply ran out of the clock, same shape as a
+  // real success, where before that path was broken and almost never
+  // wrote one. Only a genuine completion should stay excluded here,
+  // so pull each attempt's own mission_progress.report.outcome and
+  // let a 'failed' (timed-out) player back into the eligible set.
+  if (missionId === 4 && scoredPlayerIds.size > 0) {
+    const attemptIdsForScored = typedAttempts
+      .filter((attempt) => scoredPlayerIds.has(attempt.player_id))
+      .map((attempt) => attempt.id);
+
+    if (attemptIdsForScored.length > 0) {
+      const { data: progressRows } = await admin
+        .from('mission_progress')
+        .select('attempt_id, progress')
+        .in('attempt_id', attemptIdsForScored);
+
+      const failedAttemptIds = new Set(
+        (
+          (progressRows ?? []) as Array<{
+            attempt_id: string;
+            progress: Record<string, unknown> | null;
+          }>
+        )
+          .filter(
+            (row) =>
+              (row.progress?.report as { outcome?: string } | undefined)?.outcome ===
+              'failed'
+          )
+          .map((row) => row.attempt_id)
+      );
+
+      for (const attempt of typedAttempts) {
+        if (failedAttemptIds.has(attempt.id)) {
+          scoredPlayerIds.delete(attempt.player_id);
+        }
+      }
+    }
+  }
+
+  const eligible = typedAttempts.filter(
+    (attempt) => !scoredPlayerIds.has(attempt.player_id)
+  );
 
   return { eligible };
 }

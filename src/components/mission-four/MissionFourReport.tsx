@@ -24,12 +24,17 @@ export default function MissionFourReport({
   stageEarned,
   totalScore,
   remainingSeconds,
+  timeBonusPoints = 0,
   previewMode,
 }: {
   outcome: 'success' | 'failed';
   stageEarned: Partial<Record<MissionFourStageName, number>>;
   totalScore: number;
   remainingSeconds: number | null;
+  // Mission-wide "finished with time to spare" reward -- deliberately
+  // not folded into stageEarned.disarm, which stays capped at that
+  // stage's own 800-point budget (see disarm/finalize/route.ts).
+  timeBonusPoints?: number;
   previewMode?: boolean;
 }) {
   const minutes = remainingSeconds !== null ? Math.floor(remainingSeconds / 60) : null;
@@ -120,6 +125,17 @@ export default function MissionFourReport({
                 </div>
               );
             })}
+
+            {timeBonusPoints > 0 && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-900 bg-[#06160f] px-4 py-3 text-sm">
+                <span className="font-bold text-emerald-300">
+                  Time Bonus (finished with time remaining)
+                </span>
+                <span className="font-mono font-black text-emerald-300">
+                  +{timeBonusPoints}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

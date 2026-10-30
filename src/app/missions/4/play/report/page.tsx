@@ -86,11 +86,19 @@ export default async function MissionFourReportPage() {
   const totalScore = scoreRow?.total_score ?? 0;
 
   const disarmResult = progress.disarm as
-    | { remainingSecondsAtCompletion?: number }
+    | { remainingSecondsAtCompletion?: number; missionCompletionBonus?: number }
     | undefined;
 
   const remainingSeconds =
     outcome === 'success' ? disarmResult?.remainingSecondsAtCompletion ?? null : 0;
+
+  // Kept separate from stageEarned.disarm (which is capped at this
+  // stage's own 800-point budget) -- this is a mission-wide "finished
+  // with time to spare" reward, not part of DISARM's own challenge
+  // score, so it gets its own line on the report instead of inflating
+  // DISARM's number past its cap.
+  const timeBonusPoints =
+    outcome === 'success' ? disarmResult?.missionCompletionBonus ?? 0 : 0;
 
   return (
     <main className="min-h-screen bg-[#02050a] px-4 py-8 text-white sm:px-6">
@@ -100,6 +108,7 @@ export default async function MissionFourReportPage() {
           stageEarned={stageEarned}
           totalScore={totalScore}
           remainingSeconds={remainingSeconds}
+          timeBonusPoints={timeBonusPoints}
         />
       </div>
     </main>
