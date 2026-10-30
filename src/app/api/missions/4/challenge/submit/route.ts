@@ -76,6 +76,58 @@ export async function POST(request: Request) {
     }
 
     if (attempt.status !== 'active' || attempt.current_stage !== stage) {
+      // The mission can have already ended by the time this request
+      // is handled -- the client-driven /expire fast path (fired the
+      // instant the local countdown hits zero) can win a race against
+      // an in-flight challenge submit, flipping current_stage/status
+      // to 'report'/'submitted' first. That is a legitimate "time ran
+      // out," not a desync bug, so it must be reported the same way
+      // scoreChallenge's own expiry branch is (failed: true), rather
+      // than the hard 409 below -- which is what was confusing
+      // players answering a stage's last question right at the wire
+      // (e.g. "this challenge is currently not active for your
+      // attempt" on DISARM's first question after a slow TRIAGE/
+      // TRACE/CONTAIN run). Any OTHER stage/status mismatch (the
+      // player's attempt genuinely isn't on this stage) still falls
+      // through to the real error below.
+      if (attempt.current_stage === 'report') {
+        const { data: progressRow } = await supabase
+          .from('mission_progress')
+          .select('progress')
+          .eq('attempt_id', attempt.id)
+          .maybeSingle();
+
+        const existingProgress = (progressRow?.progress as Record<string, unknown>) ?? {};
+
+        const report = existingProgress.report as { outcome?: string } | undefined;
+
+        if (report?.outcome === 'failed') {
+          try {
+            await finalizeMissionFourFailure({
+              playerId: user.id,
+              attemptId: attempt.id,
+              progress: existingProgress,
+            });
+          } catch (finalizeError) {
+            console.error(
+              '[MISSION 04 CHALLENGE] Failure score finalize failed:',
+              finalizeError
+            );
+          }
+        }
+
+        return NextResponse.json(
+          {
+            ok: true,
+            outcome: 'incorrect',
+            points: 0,
+            timeDeltaSeconds: 0,
+            failed: report?.outcome === 'failed',
+          },
+          { headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
       return NextResponse.json(
         { message: 'This challenge is not currently active for your attempt.' },
         { status: 409 }
