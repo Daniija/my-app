@@ -126,6 +126,46 @@ export async function POST(request: Request) {
 
     const saved = savedRounds?.[challengeKey];
 
+    const report = (progress as Record<string, unknown> | null)?.report as
+      | { outcome?: string }
+      | undefined;
+
+    // The RPC can have unilaterally redirected this call to its
+    // time-expired branch (migration 020's `v_remaining <= 0` check)
+    // if the countdown hit zero while this request was in flight --
+    // when that happens, the returned progress has ONLY
+    // `report.outcome = 'failed'` merged in, never this challenge's
+    // own answer, by design (the mission is over, so the in-flight
+    // answer correctly doesn't count). That is a legitimate outcome,
+    // not a lost-write bug, so it must be handled -- and the mission
+    // failure finalized -- BEFORE the unconfirmed-save check below
+    // would otherwise misreport it as a server error.
+    if (report?.outcome === 'failed') {
+      try {
+        await finalizeMissionFourFailure({
+          playerId: user.id,
+          attemptId: attempt.id,
+          progress: (progress as Record<string, unknown>) ?? {},
+        });
+      } catch (finalizeError) {
+        console.error(
+          '[MISSION 04 CHALLENGE] Failure score finalize failed:',
+          finalizeError
+        );
+      }
+
+      return NextResponse.json(
+        {
+          ok: true,
+          outcome: saved?.outcome ?? 'incorrect',
+          points: saved?.points ?? 0,
+          timeDeltaSeconds: saved?.timeDeltaSeconds ?? 0,
+          failed: true,
+        },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+
     // Don't silently fall back to the locally computed result if the
     // RPC didn't actually confirm the save -- this exact fallback
     // pattern is what made a real persistence bug invisible to every
@@ -151,32 +191,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Unable to save your answer.' }, { status: 500 });
     }
 
-    const report = (progress as Record<string, unknown> | null)?.report as
-      | { outcome?: string }
-      | undefined;
-
-    if (report?.outcome === 'failed') {
-      try {
-        await finalizeMissionFourFailure({
-          playerId: user.id,
-          attemptId: attempt.id,
-          progress: (progress as Record<string, unknown>) ?? {},
-        });
-      } catch (finalizeError) {
-        console.error(
-          '[MISSION 04 CHALLENGE] Failure score finalize failed:',
-          finalizeError
-        );
-      }
-    }
-
     return NextResponse.json(
       {
         ok: true,
         outcome: saved.outcome,
         points: saved.points,
         timeDeltaSeconds: saved.timeDeltaSeconds,
-        failed: report?.outcome === 'failed',
+        failed: false,
       },
       { headers: { 'Cache-Control': 'no-store' } }
     );

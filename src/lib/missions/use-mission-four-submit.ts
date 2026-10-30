@@ -29,6 +29,12 @@ export function useMissionFourChallengeSubmit({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ChallengeScoreResult | null>(null);
   const [error, setError] = useState('');
+  // Set when the server reports the countdown hit zero while this
+  // submission was in flight (save_mission_four_challenge_progress's
+  // time-expired branch, migration 020) -- the caller must treat this
+  // as "mission failed," not as a normal scored result, since the
+  // server deliberately did NOT save this answer or its points.
+  const [failed, setFailed] = useState(false);
 
   // This hook is called once per render of MissionFourStageShell
   // with whatever the current challenge is -- the component itself
@@ -42,6 +48,7 @@ export function useMissionFourChallengeSubmit({
     setResult(null);
     setError('');
     setSubmitting(false);
+    setFailed(false);
   }, [challenge.id]);
 
   async function submit(answer: MissionFourAnswer) {
@@ -79,6 +86,11 @@ export function useMissionFourChallengeSubmit({
         throw new Error(data?.message ?? 'Submission failed.');
       }
 
+      if (data.failed) {
+        setFailed(true);
+        return;
+      }
+
       setResult({
         outcome: data.outcome,
         points: data.points,
@@ -91,5 +103,5 @@ export function useMissionFourChallengeSubmit({
     }
   }
 
-  return { submitting, result, error, submit };
+  return { submitting, result, error, failed, submit };
 }

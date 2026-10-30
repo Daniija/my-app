@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { getMissionFourStage, type MissionFourStageDefinition } from '@/lib/missions/mission-four-data';
@@ -195,6 +195,27 @@ export default function MissionFourStageShell({
     challenge: currentChallenge ?? stageDefinition.challenges[0],
     previewMode,
   });
+
+  // The countdown can hit zero while a challenge-submit request for
+  // THIS stage is in flight -- the server (migration 020's
+  // save_mission_four_challenge_progress) already recorded the
+  // mission as failed in that case without saving the in-flight
+  // answer, by design. Mirror handleExpire()'s UI/redirect, but don't
+  // call /api/missions/4/expire again: the server-side failure is
+  // already persisted, so a second expire call would be redundant.
+  useEffect(() => {
+    if (!challengeSubmit.failed || missionFailed) return;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing local UI state to a server-confirmed failure signal is the whole point of this effect, mirroring handleExpire() above
+    setMissionFailed(true);
+    play('failed');
+    logEvent('Countdown reached zero. Payload executed.', 'bad');
+
+    if (!previewMode) {
+      router.push('/missions/4/play/report');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- play/logEvent/router are stable for this component's lifetime; re-running on their identity would be spurious
+  }, [challengeSubmit.failed, missionFailed, previewMode]);
 
   const stagePoints = stageDefinition.challenges.reduce(
     (sum, c) => sum + (completed[c.id]?.points ?? 0),
