@@ -29,6 +29,7 @@ export default async function MissionFourTriagePage() {
       netAdjustmentSeconds={timer.netAdjustmentSeconds}
       initialCompletedChallenges={initialCompletedChallenges}
       priorStagesScore={priorStagesScore}
+      seed={attempt.id}
     />
   );
 }

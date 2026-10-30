@@ -6,6 +6,7 @@ import {
   isExpired,
   MISSION_FOUR_DURATION_SECONDS,
 } from './mission-four-scoring';
+import { finalizeMissionFourFailure } from './mission-four-finalize';
 
 // The full Mission 04 progression. Stage pages gate against this
 // order so a player can neither skip ahead nor get stuck behind
@@ -183,6 +184,16 @@ export async function requireMissionFourStage(
         .from('mission_attempts')
         .update({ current_stage: 'report', status: 'submitted' })
         .eq('id', attempt.id);
+
+      try {
+        await finalizeMissionFourFailure({
+          playerId: user.id,
+          attemptId: attempt.id,
+          progress,
+        });
+      } catch (error) {
+        console.error('[MISSION 04 STAGE] Failure score finalize failed:', error);
+      }
 
       redirect('/missions/4/play/report');
     }

@@ -28,6 +28,7 @@ export default async function MissionFourContainPage() {
       netAdjustmentSeconds={timer.netAdjustmentSeconds}
       initialCompletedChallenges={initialCompletedChallenges}
       priorStagesScore={priorStagesScore}
+      seed={attempt.id}
     />
   );
 }

@@ -251,7 +251,7 @@ export const MISSION_FOUR_STAGES: MissionFourStageDefinition[] = [
     title: 'Triage',
     codename: 'TRIAGE',
     description: 'Initial assessment of the detected payload.',
-    completionBonus: 30,
+    completionBonus: 0,
     challenges: TRIAGE_CHALLENGES,
   },
   {
@@ -260,7 +260,7 @@ export const MISSION_FOUR_STAGES: MissionFourStageDefinition[] = [
     title: 'Trace',
     codename: 'TRACE',
     description: 'Tracing the intrusion back to its source.',
-    completionBonus: 30,
+    completionBonus: 0,
     challenges: TRACE_CHALLENGES,
   },
   {
@@ -269,7 +269,7 @@ export const MISSION_FOUR_STAGES: MissionFourStageDefinition[] = [
     title: 'Contain',
     codename: 'CONTAIN',
     description: 'Containing the attack before it spreads.',
-    completionBonus: 30,
+    completionBonus: 0,
     challenges: CONTAIN_CHALLENGES,
   },
   {
@@ -278,7 +278,7 @@ export const MISSION_FOUR_STAGES: MissionFourStageDefinition[] = [
     title: 'Disarm',
     codename: 'DISARM',
     description: 'The final decision before detonation.',
-    completionBonus: 30,
+    completionBonus: 0,
     challenges: DISARM_CHALLENGES,
   },
 ];

@@ -14,7 +14,7 @@
 // supersedes migration 020_mission_four_stage_machine.sql's original
 // value, since SQL can't import this file) to retune the whole
 // mission's length.
-export const MISSION_FOUR_DURATION_SECONDS = 60;
+export const MISSION_FOUR_DURATION_SECONDS = 90;
 
 export type MissionFourIntensity =
   | 'normal'

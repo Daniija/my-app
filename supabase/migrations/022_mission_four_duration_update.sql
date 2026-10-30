@@ -1,12 +1,13 @@
 -- =========================================================
--- Mission 04 duration change: 12 minutes (720s) -> 1 minute (60s).
+-- Mission 04 duration change: 12 minutes (720s) -> 1 minute 30
+-- seconds (90s).
 --
 -- The mission duration is hardcoded as a literal inside
 -- advance_mission_four_stage() and save_mission_four_challenge_progress()
 -- (migration 020), per that migration's own comment: these two
 -- literals must be kept in sync with MISSION_FOUR_DURATION_SECONDS
 -- in src/lib/missions/mission-four-scoring.ts (also being updated to
--- 60 in this same change). This migration only replaces those two
+-- 90 in this same change). This migration only replaces those two
 -- function bodies with the corrected duration -- same signatures,
 -- same logic, same idempotency/expiry-check behaviour as migration
 -- 020. "create or replace" works whether migration 020 has already
@@ -25,7 +26,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $advance_mission_four_stage$
 declare
   v_uid uuid := auth.uid();
   v_attempt public.mission_attempts%rowtype;
@@ -68,7 +69,7 @@ begin
 
   if v_started_at is not null and p_to_stage <> 'report' then
     v_net_adjustment := coalesce((v_progress -> 'timer' ->> 'netAdjustmentSeconds')::integer, 0);
-    v_remaining := 60 + v_net_adjustment
+    v_remaining := 90 + v_net_adjustment
       - floor(extract(epoch from (now() - v_started_at::timestamptz)));
 
     if v_remaining <= 0 then
@@ -116,7 +117,7 @@ begin
 
   return v_progress;
 end;
-$$;
+$advance_mission_four_stage$;
 
 create or replace function public.save_mission_four_challenge_progress(
   p_attempt_id uuid,
@@ -129,7 +130,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $save_mission_four_challenge_progress$
 declare
   v_uid uuid := auth.uid();
   v_attempt public.mission_attempts%rowtype;
@@ -179,7 +180,7 @@ begin
 
   if v_started_at is not null then
     v_net_adjustment := coalesce((v_progress -> 'timer' ->> 'netAdjustmentSeconds')::integer, 0);
-    v_remaining := 60 + v_net_adjustment
+    v_remaining := 90 + v_net_adjustment
       - floor(extract(epoch from (now() - v_started_at::timestamptz)));
 
     if v_remaining <= 0 then
@@ -231,4 +232,4 @@ begin
 
   return v_progress;
 end;
-$$;
+$save_mission_four_challenge_progress$;

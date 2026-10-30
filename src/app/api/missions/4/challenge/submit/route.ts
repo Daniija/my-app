@@ -5,6 +5,7 @@ import { writeErrorAuditLog } from '@/lib/audit';
 import { getMissionFourChallenge } from '@/lib/missions/mission-four-data';
 import { scoreChallenge, type MissionFourAnswer } from '@/lib/missions/mission-four-challenge-engine';
 import type { MissionFourStageName } from '@/lib/missions/mission-four-scoring';
+import { finalizeMissionFourFailure } from '@/lib/missions/mission-four-finalize';
 
 const VALID_STAGES: MissionFourStageName[] = ['triage', 'trace', 'contain', 'disarm'];
 
@@ -153,6 +154,21 @@ export async function POST(request: Request) {
     const report = (progress as Record<string, unknown> | null)?.report as
       | { outcome?: string }
       | undefined;
+
+    if (report?.outcome === 'failed') {
+      try {
+        await finalizeMissionFourFailure({
+          playerId: user.id,
+          attemptId: attempt.id,
+          progress: (progress as Record<string, unknown>) ?? {},
+        });
+      } catch (finalizeError) {
+        console.error(
+          '[MISSION 04 CHALLENGE] Failure score finalize failed:',
+          finalizeError
+        );
+      }
+    }
 
     return NextResponse.json(
       {

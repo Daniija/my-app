@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { getMissionFourStage } from '@/lib/missions/mission-four-data';
+import { getMissionFourStage, type MissionFourStageDefinition } from '@/lib/missions/mission-four-data';
 import type { MissionFourStageName } from '@/lib/missions/mission-four-scoring';
 import { useMissionFourTimer } from '@/lib/missions/use-mission-four-timer';
 import { useMissionFourChallengeSubmit } from '@/lib/missions/use-mission-four-submit';
@@ -35,6 +35,73 @@ function nextLogId() {
   return `log-${logIdCounter}`;
 }
 
+// Deterministic per-player shuffle so two players never see the same
+// question/answer order within a stage, while the SAME player sees
+// a stable order for the life of their attempt (refresh-safe, since
+// `seed` is that player's attempt id). Hashes `seed` into a 32-bit
+// int and drives a small xorshift PRNG from it -- no crypto needed,
+// this only governs display order, never scoring. Always returns
+// new arrays; never mutates the shared module-level challenge/option
+// objects from mission-four-data.ts, which are reused across every
+// request in this Node process.
+function hashSeed(seed: string): number {
+  let hash = 0;
+
+  for (let i = 0; i < seed.length; i++) {
+    hash = (Math.imul(31, hash) + seed.charCodeAt(i)) | 0;
+  }
+
+  return hash || 1;
+}
+
+function seededShuffle<T>(items: T[], seed: string): T[] {
+  let state = hashSeed(seed);
+  const result = items.slice();
+
+  for (let i = result.length - 1; i > 0; i--) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+
+    const random = (state >>> 0) / 4294967296;
+    const j = Math.floor(random * (i + 1));
+
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+
+  return result;
+}
+
+// Reorders a stage's challenge list, and each multiple-choice
+// challenge's option list, for one player's seed. Every challenge
+// keeps its own stable id/points/correctOptionId -- only display
+// order changes, so scoring, completion checks, and point totals
+// (all keyed by id, never by position) are completely unaffected.
+// `title` is renumbered to the challenge's new 1-based position in
+// THIS player's shuffled order, so "Question 1" is always whatever
+// they see first, never the question's original global id (9-16 for
+// TRACE, say) -- the only thing that changes is this display label.
+function shuffledStageForPlayer(
+  stage: MissionFourStageDefinition,
+  seed: string
+): MissionFourStageDefinition {
+  return {
+    ...stage,
+    challenges: seededShuffle(stage.challenges, `${seed}:${stage.id}:questions`).map(
+      (challenge, index) => {
+        const numbered = { ...challenge, title: `Question ${index + 1}` };
+
+        return numbered.type === 'multiple_choice'
+          ? {
+              ...numbered,
+              options: seededShuffle(numbered.options, `${seed}:${challenge.id}:options`),
+            }
+          : numbered;
+      }
+    ),
+  };
+}
+
 export default function MissionFourStageShell({
   stage,
   previewMode,
@@ -43,6 +110,7 @@ export default function MissionFourStageShell({
   initialCompletedChallenges,
   priorStagesScore,
   devPaused = false,
+  seed,
 }: {
   stage: MissionFourStageName;
   previewMode: boolean;
@@ -54,9 +122,20 @@ export default function MissionFourStageShell({
   >;
   priorStagesScore: number;
   devPaused?: boolean;
+  // The real stage pages pass this player's attempt id, so the
+  // shuffle below is stable for that player but differs across
+  // players. Admin preview has no real attempt, so it falls back to
+  // the stage name (still deterministic, just shared by every
+  // preview session).
+  seed?: string;
 }) {
   const router = useRouter();
-  const stageDefinition = getMissionFourStage(stage);
+  const baseStageDefinition = getMissionFourStage(stage);
+
+  const stageDefinition = useMemo(
+    () => shuffledStageForPlayer(baseStageDefinition, seed ?? stage),
+    [baseStageDefinition, seed, stage]
+  );
 
   const [completed, setCompleted] = useState(initialCompletedChallenges);
   const [netAdjustment, setNetAdjustment] = useState(netAdjustmentSeconds);

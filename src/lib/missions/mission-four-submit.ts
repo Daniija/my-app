@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { writeErrorAuditLog } from '@/lib/audit';
 import { getMissionFourStage } from './mission-four-data';
 import type { MissionFourStageName } from './mission-four-scoring';
+import { finalizeMissionFourFailure } from './mission-four-finalize';
 
 // Checks whether every challenge in a stage has a saved result in
 // mission_progress.progress.<stage>_challenges -- the completeness
@@ -165,6 +166,21 @@ export async function submitMissionFourStage({
     // of what toStage was asked for -- reflect that honestly rather
     // than claiming the originally-requested stage succeeded.
     const actualNextStage = report ? 'report' : toStage;
+
+    if (report?.outcome === 'failed') {
+      try {
+        await finalizeMissionFourFailure({
+          playerId: user.id,
+          attemptId: attempt.id,
+          progress: (progress as Record<string, unknown>) ?? {},
+        });
+      } catch (finalizeError) {
+        console.error(
+          '[MISSION 04 SUBMIT] Failure score finalize failed:',
+          finalizeError
+        );
+      }
+    }
 
     return NextResponse.json(
       {

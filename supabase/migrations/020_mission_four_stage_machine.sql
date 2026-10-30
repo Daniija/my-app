@@ -32,7 +32,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $guard_mission_attempt_transition$
 begin
   if auth.role() is distinct from 'authenticated' then
     return new;
@@ -240,7 +240,7 @@ begin
   -- alongside its gameplay routes.
   raise exception 'INVALID_STAGE_TRANSITION';
 end;
-$$;
+$guard_mission_attempt_transition$;
 
 -- =========================================================
 -- advance_mission_four_stage(): atomic, row-locked stage advance.
@@ -271,7 +271,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $advance_mission_four_stage$
 declare
   v_uid uuid := auth.uid();
   v_attempt public.mission_attempts%rowtype;
@@ -367,7 +367,7 @@ begin
 
   return v_progress;
 end;
-$$;
+$advance_mission_four_stage$;
 
 -- =========================================================
 -- save_mission_four_challenge_progress(): saves one challenge's
@@ -392,7 +392,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $save_mission_four_challenge_progress$
 declare
   v_uid uuid := auth.uid();
   v_attempt public.mission_attempts%rowtype;
@@ -494,7 +494,7 @@ begin
 
   return v_progress;
 end;
-$$;
+$save_mission_four_challenge_progress$;
 
 grant execute
 on function public.advance_mission_four_stage(uuid, text, text, text, text, jsonb)

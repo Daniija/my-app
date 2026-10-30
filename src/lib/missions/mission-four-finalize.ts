@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { clampMissionScore } from './mission-four-scoring';
+import { clampMissionScore, MISSION_FOUR_STAGE_ORDER } from './mission-four-scoring';
 
 // Writes the final, server-computed Mission 04 total into
 // mission_scores and recomputes leaderboard_entries -- mirrors
@@ -143,4 +143,70 @@ export async function finalizeMissionFourScore({
   }
 
   return { missionFourScore, alreadyFinalized: false };
+}
+
+// Called wherever Mission 04 is marked FAILED on a time-expiry (the
+// stage-page server gate, the client-triggered /expire fast path,
+// and the two spots that forward a report.outcome==='failed' signal
+// coming back from the advance_mission_four_stage /
+// save_mission_four_challenge_progress RPCs themselves) -- these
+// paths used to just stamp mission_attempts as submitted/failed
+// without ever calling finalizeMissionFourScore(), so a player who
+// ran out of time kept whatever they'd earned in mission_progress
+// but it was never written to mission_scores or leaderboard_entries,
+// i.e. they were scored 0 regardless of how far they'd gotten.
+//
+// rawTotal here gives full credit (challenge points + completion
+// bonus) for every stage that had already been finalized before the
+// timeout, plus partial credit (challenge points only, no completion
+// bonus they never earned) for whichever stage was still in progress
+// when time ran out -- so a player always keeps the points they
+// actually gained, never zero.
+export async function finalizeMissionFourFailure({
+  playerId,
+  attemptId,
+  progress,
+}: {
+  playerId: string;
+  attemptId: string;
+  progress: Record<string, unknown>;
+}): Promise<{ missionFourScore: number; alreadyFinalized: boolean }> {
+  const admin = createAdminClient();
+
+  const rawTotal = MISSION_FOUR_STAGE_ORDER.reduce((sum, stage) => {
+    const finalized = progress[stage] as { points?: number } | undefined;
+
+    if (finalized && typeof finalized.points === 'number') {
+      return sum + finalized.points;
+    }
+
+    const challenges = progress[`${stage}_challenges`] as
+      | Record<string, { points?: number }>
+      | undefined;
+
+    if (!challenges) {
+      return sum;
+    }
+
+    return (
+      sum +
+      Object.values(challenges).reduce(
+        (challengeSum, challenge) => challengeSum + (challenge.points ?? 0),
+        0
+      )
+    );
+  }, 0);
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('alias')
+    .eq('id', playerId)
+    .maybeSingle();
+
+  return finalizeMissionFourScore({
+    playerId,
+    playerAlias: profile?.alias ?? null,
+    attemptId,
+    rawTotal,
+  });
 }

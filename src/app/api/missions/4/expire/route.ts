@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { computeRemainingSeconds, isExpired } from '@/lib/missions/mission-four-scoring';
+import { finalizeMissionFourFailure } from '@/lib/missions/mission-four-finalize';
 
 // Client-triggered fast-path only -- NOT a second source of truth.
 // Re-derives expiry server-side using the exact same formula
@@ -85,6 +86,16 @@ export async function POST() {
     .from('mission_attempts')
     .update({ current_stage: 'report', status: 'submitted' })
     .eq('id', attempt.id);
+
+  try {
+    await finalizeMissionFourFailure({
+      playerId: user.id,
+      attemptId: attempt.id,
+      progress,
+    });
+  } catch (error) {
+    console.error('[MISSION 04 EXPIRE] Failure score finalize failed:', error);
+  }
 
   return NextResponse.json(
     { expired: true, nextStage: 'report' },

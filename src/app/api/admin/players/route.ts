@@ -292,20 +292,34 @@ export async function POST(request: Request) {
           );
         }
       } else {
-        // Un-flagging: restore their real leaderboard row from
-        // whatever mission_scores they already have, using the same
-        // SQL function the score-write trigger itself calls.
-        const {
-          error: refreshError,
-        } = await admin.rpc('refresh_leaderboard_for_player', {
-          p_player: playerId,
-        });
+        // Un-flagging: a test playthrough was never meant to count,
+        // so reset every mission attempt/score this player made
+        // while testing rather than promoting that progress into a
+        // real leaderboard entry. Mirrors the 'delete' action's
+        // cleanupTables pattern above, minus the profiles row.
+        const testerCleanupTables = [
+          'mission_evidence_reviews',
+          'mission_theories',
+          'mission_containment',
+          'mission_breach_reports',
+          'mission_attempts', // cascades to mission_progress + mission_scores
+          'leaderboard_entries',
+        ];
 
-        if (refreshError) {
-          console.warn(
-            '[ADMIN PLAYERS] Unable to restore leaderboard entry for former tester:',
-            refreshError
-          );
+        for (const table of testerCleanupTables) {
+          const {
+            error: testerCleanupError,
+          } = await admin
+            .from(table)
+            .delete()
+            .eq('player_id', playerId);
+
+          if (testerCleanupError) {
+            console.warn(
+              `[ADMIN PLAYERS] Former-tester cleanup warning for ${table}:`,
+              testerCleanupError
+            );
+          }
         }
       }
 

@@ -21,11 +21,26 @@ function parseMissionId(value: unknown): number | null {
   return missionId;
 }
 
+// Mission 01's real content lives in these player_id+mission_id
+// keyed tables rather than mission_progress -- unlike missions
+// 2/3/4, they have no FK to mission_attempts, so deleting the
+// attempt (or its cascade) never clears them. A reset must clear
+// them explicitly or a "reset" player would still see their old
+// answers pre-filled on replay.
+const MISSION_ONE_STAGE_TABLES = [
+  'mission_evidence_reviews',
+  'mission_theories',
+  'mission_containment',
+  'mission_breach_reports',
+];
+
 // Resets a single player's attempt at a single mission -- the
 // per-player counterpart to /api/admin/missions/reset-all. Same
 // safety rule: a player who already has a mission_scores row for
 // this mission (a real finalized result) is never touched, no
-// matter what their mission_attempts row says.
+// matter what their mission_attempts row says -- UNLESS the player
+// is a flagged mission tester, who must always be resettable (even
+// after a full completion) so they can replay before launch.
 export async function POST(request: Request) {
   const guard = await requireAdminApi();
   if (!guard.ok) return guard.response;
@@ -56,7 +71,7 @@ export async function POST(request: Request) {
 
     const { data: target, error: targetError } = await admin
       .from('profiles')
-      .select('id, alias, username')
+      .select('id, alias, username, is_tester')
       .eq('id', playerId)
       .single();
 
@@ -67,28 +82,49 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: existingScore, error: scoreCheckError } = await admin
-      .from('mission_scores')
-      .select('id')
-      .eq('player_id', playerId)
-      .eq('mission_id', missionId)
-      .maybeSingle();
+    const isTester = target.is_tester === true;
 
-    if (scoreCheckError) {
-      console.error('[ADMIN RESET MISSION] Score check failed:', scoreCheckError);
+    if (!isTester) {
+      const { data: existingScore, error: scoreCheckError } = await admin
+        .from('mission_scores')
+        .select('id')
+        .eq('player_id', playerId)
+        .eq('mission_id', missionId)
+        .maybeSingle();
 
-      return NextResponse.json(
-        { error: 'Unable to check this player\'s mission status.' },
-        { status: 500 }
-      );
+      if (scoreCheckError) {
+        console.error('[ADMIN RESET MISSION] Score check failed:', scoreCheckError);
+
+        return NextResponse.json(
+          { error: 'Unable to check this player\'s mission status.' },
+          { status: 500 }
+        );
+      }
+
+      if (existingScore) {
+        return NextResponse.json({
+          ok: true,
+          reset: false,
+          reason: 'already_completed',
+        });
+      }
     }
 
-    if (existingScore) {
-      return NextResponse.json({
-        ok: true,
-        reset: false,
-        reason: 'already_completed',
-      });
+    if (missionId === 1) {
+      for (const table of MISSION_ONE_STAGE_TABLES) {
+        const { error: stageCleanupError } = await admin
+          .from(table)
+          .delete()
+          .eq('player_id', playerId)
+          .eq('mission_id', 1);
+
+        if (stageCleanupError) {
+          console.warn(
+            `[ADMIN RESET MISSION] Mission 01 stage cleanup warning for ${table}:`,
+            stageCleanupError
+          );
+        }
+      }
     }
 
     const { data: attempt, error: attemptError } = await admin
@@ -141,8 +177,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Defensive leaderboard cleanup -- a no-op in practice since this
-    // player was just confirmed to have no mission_scores row.
+    // Defensive leaderboard cleanup. For a non-tester this is a
+    // no-op in practice (they were just confirmed to have no
+    // mission_scores row); for a tester whose completed score was
+    // just cascade-deleted along with their attempt, this is what
+    // actually zeroes the just-reset mission's column (testers have
+    // no real leaderboard row to begin with, so the update simply
+    // matches zero rows and is harmless either way).
     const scoreColumn = MISSION_SCORE_COLUMNS[missionId];
 
     const { data: officialScores } = await admin

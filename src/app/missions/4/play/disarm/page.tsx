@@ -29,6 +29,7 @@ export default async function MissionFourDisarmPage() {
       netAdjustmentSeconds={timer.netAdjustmentSeconds}
       initialCompletedChallenges={initialCompletedChallenges}
       priorStagesScore={priorStagesScore}
+      seed={attempt.id}
     />
   );
 }
